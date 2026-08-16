@@ -100,21 +100,46 @@ class CardRepository(
     }
 
     /**
-     * 词表升级后回填旧卡词条缺口（音标/级别）：老数据分析时词表尚未覆盖（如 loom 无音标），
-     * 启动时对空缺词条查表补齐，幂等（无缺口时零更新）。四级基础词按原规则不补级别。
+     * 启动回填旧卡词条缺口（音标/级别）+ 归一化 LLM 合并格式音标：
+     * - 老数据分析时词表尚未覆盖（如 loom 无音标）→ 查表补齐，幂等（无缺口时零更新）；
+     *   音标兜底跳过词表空音标词条继续查变形原形（crouched → crouch）。
+     * - LLM 偶发把「英 /x/，美 /y/」合并写进单字段 → 拆到 phonetic / phoneticUs 两列。
+     * - 词表升级为英/美双音标后补美音缺口；旧版词表音标列实为美音，
+     *   当库内音标与美音相同而英音不同时纠正为英音（避免「英 /wɑnd/」标错）。
+     * 四级基础词按原规则不补级别。
      */
     suspend fun backfillWordGaps() {
-        val rows = wordDao.withMissingMeta()
+        val rows = wordDao.withMissingMeta() + wordDao.withCombinedPhonetic()
         if (rows.isEmpty()) return
         val updates = ArrayList<CardWord>()
         for (cw in rows) {
-            val entry = wordLevels.lookup(cw.word) ?: continue
             var changed = false
-            val phonetic = cw.phonetic?.takeIf { it.isNotBlank() }
-                ?: entry.phonetic.takeIf { it.isNotBlank() }?.also { changed = true }
+            val (uk, us) = AnalysisParser.splitPhoneticField(cw.phonetic)
+            var newUs = cw.phoneticUs ?: us
+            if (uk != null && uk != cw.phonetic) changed = true
+            if (newUs != cw.phoneticUs) changed = true
+            val entry = wordLevels.lookup(cw.word)
+            var phonetic = uk?.takeIf { it.isNotBlank() }
+                ?: wordLevels.phoneticOf(cw.word)?.also { changed = true }
+            // 美音缺口：词表补（含变形原形回退）。
+            if (newUs.isNullOrBlank()) {
+                wordLevels.phoneticUsOf(cw.word)?.let { usOf ->
+                    newUs = usOf
+                    changed = true
+                    // 库内音标与美音相同（旧版词表实为美音）且英音不同 → 纠正为英音。
+                    if (phonetic != null && phonetic == usOf) {
+                        wordLevels.phoneticOf(cw.word)?.let { ukOf ->
+                            if (ukOf != usOf) {
+                                phonetic = ukOf
+                                changed = true
+                            }
+                        }
+                    }
+                }
+            }
             val level = cw.level?.takeIf { it.isNotEmpty() }
-                ?: entry.level.takeIf { it.isNotEmpty() && !entry.base }?.also { changed = true }
-            if (changed) updates.add(cw.copy(phonetic = phonetic, level = level))
+                ?: entry?.level?.takeIf { it.isNotEmpty() && !entry.base }?.also { changed = true }
+            if (changed) updates.add(cw.copy(phonetic = phonetic, phoneticUs = newUs, level = level))
         }
         if (updates.isNotEmpty()) wordDao.updateAll(updates)
     }
@@ -197,7 +222,7 @@ class CardRepository(
     /**
      * 组装 CardWord 列表：
      * 1. LLM 关键词按 [Keywords.splitKeyword] 拆分（LLM 偶发把并列结构合并成一个关键词），
-     *    每项一条；命中级别表则补 level/phonetic/释义兜底。
+     *    每项一条；音标（英/美）/级别/原型/词性/释义均 LLM 优先、命中级别表则词表兜底。
      * 2. 句子分词 → 级别表查缺补漏（六级/考研/雅思/专四/专八），跳过已被 LLM 关键词覆盖的词，
      *    上限 5 个（防止整句刷角标）。
      */
@@ -224,14 +249,20 @@ class CardRepository(
                     CardWord(
                         cardId = card.id,
                         word = part,
-                        // 词表兜底同样要过 blank 守卫：TSV 中音标列可能为空串，
-                        // 空串非 null 会让 UI 渲染空行（loomed 与级别标记之间的空行）。
-                        phonetic = k.phonetic?.takeIf { it.isNotBlank() }
-                            ?: entry?.phonetic?.takeIf { it.isNotBlank() },
+                        // 各元素 LLM 优先、词表兜底、再无则 null（UI 不显示）。
+                        // 音标分英/美两列：LLM 缺时词表双音标兜底（英/美各查，含变形原形回退）；
+                        // phoneticOf 跳过词表空音标词条继续查变形原形（crouched → crouch）。
+                        phonetic = k.phoneticUk?.takeIf { it.isNotBlank() }
+                            ?: wordLevels.phoneticOf(part),
+                        phoneticUs = k.phoneticUs?.takeIf { it.isNotBlank() }
+                            ?: wordLevels.phoneticUsOf(part),
                         pos = if (!k.pos.isNullOrBlank()) k.pos else posFromMeaning,
                         meaningInContext = meaning,
                         orderIdx = idx++,
-                        level = entry?.level?.takeIf { it.isNotEmpty() },
+                        level = k.level?.takeIf { it.isNotBlank() }
+                            ?: entry?.level?.takeIf { it.isNotEmpty() },
+                        lemma = k.lemma?.takeIf { it.isNotBlank() }
+                            ?: wordLevels.lemma(part),
                     )
                 )
             }
@@ -258,7 +289,8 @@ class CardRepository(
                     CardWord(
                         cardId = card.id,
                         word = t.value,
-                        phonetic = entry.phonetic.takeIf { it.isNotBlank() },
+                        phonetic = wordLevels.phoneticOf(t.value),
+                        phoneticUs = wordLevels.phoneticUsOf(t.value),
                         pos = pos,
                         meaningInContext = meaning,
                         orderIdx = idx++,

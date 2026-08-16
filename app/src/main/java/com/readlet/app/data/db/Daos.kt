@@ -80,12 +80,17 @@ interface CardWordDao {
     @Query("SELECT * FROM card_words WHERE cardId IN (:ids) ORDER BY orderIdx ASC")
     suspend fun byCards(ids: List<Long>): List<CardWord>
 
-    /** 音标/级别空缺的词条（词表升级后启动回填用）。 */
+    /** 音标/级别空缺的词条（词表升级后启动回填用；美音缺口同样回填）。 */
     @Query(
         "SELECT * FROM card_words WHERE phonetic IS NULL OR phonetic = '' " +
+            "OR phoneticUs IS NULL OR phoneticUs = '' " +
             "OR level IS NULL OR level = ''"
     )
     suspend fun withMissingMeta(): List<CardWord>
+
+    /** 音标字段带「英/美」标记的合并格式（LLM 格式漂移），启动时归一化为 英/美 两列。 */
+    @Query("SELECT * FROM card_words WHERE phonetic LIKE '%美%' OR phonetic LIKE '%英%'")
+    suspend fun withCombinedPhonetic(): List<CardWord>
 
     @Update
     suspend fun updateAll(words: List<CardWord>)

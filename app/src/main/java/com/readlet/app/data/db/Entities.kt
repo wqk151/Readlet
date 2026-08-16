@@ -58,12 +58,17 @@ data class CardWord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val cardId: Long,
     val word: String,
+    /** 英式音标（LLM 优先，词表兜底）。 */
     val phonetic: String? = null,
+    /** 美式音标（仅 LLM 提供；词表无美音数据，缺失则不显示）。 */
+    val phoneticUs: String? = null,
     val pos: String? = null,
     val meaningInContext: String? = null,
     val orderIdx: Int = 0,
-    /** 考试级别角标（v4）：六级/考研/雅思/专四/专八；空 = 无级别。LLM 重点词命中级别表也补标。 */
+    /** 考试级别角标（v4）：六级/考研/雅思/专四/专八；空 = 无级别。LLM 优先，词表兜底。 */
     val level: String? = null,
+    /** 原型（v6）：LLM 优先（loomed → loom），词表变形还原兜底；原形或词组为 null。 */
+    val lemma: String? = null,
 )
 
 /** 复习日志：SRS 排程与统计（热力图/曲线/打卡）的数据源 */

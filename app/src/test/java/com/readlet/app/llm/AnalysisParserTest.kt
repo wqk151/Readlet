@@ -11,7 +11,7 @@ class AnalysisParserTest {
     fun `parses sentence mode json`() {
         val raw = """
             {"mode":"sentence","translation":"雾从海面涌来，压低了远处港口的灯火。",
-             "keywords":[{"word":"muffling","phonetic":"/ˈmʌflɪŋ/","pos":"v.","meaning_in_context":"使(声音/光线)变低沉；此处指雾气模糊了灯光"}],
+             "keywords":[{"word":"muffling","phonetic_uk":"/ˈmʌflɪŋ/","phonetic_us":"/ˈmʌflɪŋ/","pos":"v.","level":"六级","lemma":"muffle","meaning_in_context":"使(声音/光线)变低沉；此处指雾气模糊了灯光"}],
              "points":[{"expr":"muffling the harbor lights","meaning":"现在分词伴随状语"}],
              "grammar":[{"structure":"The fog rolled in","explanation":"主干：主语+谓语"}],
              "collocations":[{"phrase":"roll in","meaning":"(雾/云)滚滚而来","example":"Dark clouds rolled in.","example_cn":"乌云滚滚而来。"}]}
@@ -21,8 +21,11 @@ class AnalysisParserTest {
         assertEquals("雾从海面涌来，压低了远处港口的灯火。", r.translation)
         assertEquals(1, r.keywords.size)
         assertEquals("muffling", r.keywords[0].word)
-        assertEquals("/ˈmʌflɪŋ/", r.keywords[0].phonetic)
+        assertEquals("/ˈmʌflɪŋ/", r.keywords[0].phoneticUk)
+        assertEquals("/ˈmʌflɪŋ/", r.keywords[0].phoneticUs)
         assertEquals("v.", r.keywords[0].pos)
+        assertEquals("六级", r.keywords[0].level)
+        assertEquals("muffle", r.keywords[0].lemma)
         assertEquals(1, r.grammar.size)
         assertEquals("roll in", r.collocations[0].phrase)
         assertEquals("Dark clouds rolled in.", r.collocations[0].example)
@@ -41,6 +44,9 @@ class AnalysisParserTest {
         assertEquals("word", r.mode)
         assertNull(r.translation)
         assertEquals("harbor", r.keywords[0].word)
+        // 旧 prompt 的 phonetic 归入英式音标
+        assertEquals("/ˈhɑːrbər/", r.keywords[0].phoneticUk)
+        assertNull(r.keywords[0].phoneticUs)
         assertTrue(r.points.isEmpty())
     }
 
@@ -49,7 +55,10 @@ class AnalysisParserTest {
         val raw = """{"mode":"sentence","translation":"译文","keywords":[{"word":"x"}]}"""
         val r = AnalysisParser.parse(raw)
         assertEquals("译文", r.translation)
-        assertNull(r.keywords[0].phonetic)
+        assertNull(r.keywords[0].phoneticUk)
+        assertNull(r.keywords[0].phoneticUs)
+        assertNull(r.keywords[0].level)
+        assertNull(r.keywords[0].lemma)
         assertNull(r.keywords[0].meaningInContext)
         assertTrue(r.grammar.isEmpty())
     }
@@ -80,5 +89,72 @@ class AnalysisParserTest {
         assertEquals("phrase", r.mode)
         assertEquals("take care of", r.keywords[0].word)
         assertEquals("She took care of the baby.", r.collocations[0].example)
+    }
+
+    // ---------- 音标字段归一化 ----------
+
+    @Test
+    fun `splits merged labeled phonetics`() {
+        val (uk, us) = AnalysisParser.splitPhoneticField("英 /ɡɒt tə hɪz fiːt/，美 /ɡɑːt tə hɪz fiːt/")
+        assertEquals("/ɡɒt tə hɪz fiːt/", uk)
+        assertEquals("/ɡɑːt tə hɪz fiːt/", us)
+    }
+
+    @Test
+    fun `splits english labeled phonetics case-insensitive`() {
+        val (uk, us) = AnalysisParser.splitPhoneticField("UK: /wɒnd/ US: /wɑːnd/")
+        assertEquals("/wɒnd/", uk)
+        assertEquals("/wɑːnd/", us)
+        val (uk2, us2) = AnalysisParser.splitPhoneticField("英式 /rəʊb/ 美式 /roʊb/")
+        assertEquals("/rəʊb/", uk2)
+        assertEquals("/roʊb/", us2)
+    }
+
+    @Test
+    fun `splits bare multiple ipas in order`() {
+        val (uk, us) = AnalysisParser.splitPhoneticField("/wɒnd/ /wɑːnd/")
+        assertEquals("/wɒnd/", uk)
+        assertEquals("/wɑːnd/", us)
+    }
+
+    @Test
+    fun `bare single phonetic stays uk`() {
+        val (uk, us) = AnalysisParser.splitPhoneticField("/ˈmʌflɪŋ/")
+        assertEquals("/ˈmʌflɪŋ/", uk)
+        assertNull(us)
+    }
+
+    @Test
+    fun `blank and garbage phonetics pass through`() {
+        val (uk1, us1) = AnalysisParser.splitPhoneticField("")
+        assertNull(uk1)
+        assertNull(us1)
+        val (uk2, us2) = AnalysisParser.splitPhoneticField("英式读音")
+        assertEquals("英式读音", uk2)
+        assertNull(us2)
+    }
+
+    @Test
+    fun `merged format in single field splits at parse time`() {
+        val raw = """
+            {"mode":"sentence","translation":"译文",
+             "keywords":[{"word":"wand","phonetic_uk":"英 /wɒnd/，美 /wɑːnd/"}],
+             "points":[],"grammar":[],"collocations":[]}
+        """.trimIndent()
+        val r = AnalysisParser.parse(raw)
+        assertEquals("/wɒnd/", r.keywords[0].phoneticUk)
+        assertEquals("/wɑːnd/", r.keywords[0].phoneticUs)
+    }
+
+    @Test
+    fun `explicit phonetic_us wins over merged split`() {
+        val raw = """
+            {"mode":"sentence","translation":"译文",
+             "keywords":[{"word":"wand","phonetic_uk":"英 /wɒnd/，美 /wɑːnd/","phonetic_us":"/wɑːnd/"}],
+             "points":[],"grammar":[],"collocations":[]}
+        """.trimIndent()
+        val r = AnalysisParser.parse(raw)
+        assertEquals("/wɒnd/", r.keywords[0].phoneticUk)
+        assertEquals("/wɑːnd/", r.keywords[0].phoneticUs)
     }
 }

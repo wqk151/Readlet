@@ -152,6 +152,33 @@ fun MetaLine(content: String) {
     )
 }
 
+/** 重点词元信息行：英/美音标 · 原型 · 级别，全部中点号隔开（级别与音标同行）；缺项不显示。 */
+@Composable
+fun KeywordMetaLine(
+    word: String,
+    phonetic: String?,
+    phoneticUs: String?,
+    level: String?,
+    lemma: String?,
+) {
+    // 与词形相同的原型没有展示价值（harbor → 原型 harbor），隐藏；blank 同样隐藏。
+    val lemmaShown = lemma?.takeIf { it.isNotBlank() && !it.equals(word, ignoreCase = true) }
+    val parts = listOfNotNull(
+        phonetic?.takeIf { it.isNotBlank() }?.let { "英 $it" },
+        phoneticUs?.takeIf { it.isNotBlank() }?.let { "美 $it" },
+        lemmaShown?.let { "原型 $it" },
+        Keywords.levelLabel(level),
+    )
+    if (parts.isNotEmpty()) {
+        Text(
+            parts.joinToString(" · "),
+            fontSize = 12.sp,
+            color = Muted,
+            modifier = Modifier.padding(top = 1.dp),
+        )
+    }
+}
+
 /** 白色圆角卡片容器。内容自上而下排列（Column）。 */
 @Composable
 fun CardSurface(onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {

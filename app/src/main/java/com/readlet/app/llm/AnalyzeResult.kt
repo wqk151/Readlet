@@ -11,8 +11,11 @@ data class AnalyzeResult(
 ) {
     data class Keyword(
         val word: String,
-        val phonetic: String?,
+        val phoneticUk: String?,      // 英式音标（旧 prompt 的 phonetic 也归入此字段）
+        val phoneticUs: String?,      // 美式音标
         val pos: String?,
+        val level: String?,           // 考试级别：六级/考研/雅思/专四/专八
+        val lemma: String?,           // 原型（动词原形/名词单数）；原形或短语为 null
         val meaningInContext: String?,
     )
 

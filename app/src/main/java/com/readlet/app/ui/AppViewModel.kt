@@ -302,7 +302,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             repo.learnCard(cardId)
             analysisTick.value++
-            showToast("已开始学习，明天起进入复习排程")
+            showToast("已加入复习，明天起进入复习排程")
         }
     }
 

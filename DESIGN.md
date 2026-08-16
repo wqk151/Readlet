@@ -107,9 +107,11 @@ LlmUsage (大模型调用记录，独立于卡片，统计「调用次数 / Toke
 |---|---|
 | id / cardId | PK / FK |
 | word | 词形（**索引键**，GROUP BY 得词频） |
-| phonetic / pos | 音标 / 词性 |
+| phonetic / phoneticUs | 英式音标 / 美式音标（v6 新增美音列；LLM 优先、词表兜底，美音词表无数据，缺失不显示） |
+| pos | 词性 |
 | meaningInContext | **语境释义**（本句中的含义） |
-| level | 考试级别角标（v4 新增）：六级/考研/雅思/专四/专八；LLM 重点词命中级别表时也补标，空 = 无级别 |
+| level | 考试级别角标（v4 新增，v6 起 LLM 提供、词表兜底）：六级/考研/雅思/专四/专八，空 = 无级别 |
+| lemma | 原型（v6 新增）：LLM 提供、词表变形还原兜底；原形或词组为 null |
 | orderIdx | 卡内显示顺序 |
 
 ### ReviewLog
@@ -147,7 +149,8 @@ LlmUsage (大模型调用记录，独立于卡片，统计「调用次数 / Toke
   "mode": "sentence | word | phrase",
   "translation": "整句译文（单词/短语模式为 null）",
   "keywords": [
-    { "word": "muffling", "phonetic": "/ˈmʌflɪŋ/", "pos": "v.",
+    { "word": "muffling", "phonetic_uk": "/ˈmʌflɪŋ/", "phonetic_us": "/ˈmʌflɪŋ/",
+      "pos": "v.", "level": "六级", "lemma": "muffle",
       "meaning_in_context": "使(声音/光线)变低沉；此处指雾气模糊了灯光" }
   ],
   "points": [
@@ -177,11 +180,12 @@ LlmUsage (大模型调用记录，独立于卡片，统计「调用次数 / Toke
 每次分享 1 次请求（卡片必含分析）。model 默认 `deepseek-chat`，可在设置改。
 
 ### 6.5 重点词级别补充（本地词表，零 LLM 成本）
-- 资产 `assets/word_levels.tsv`：80,440 词 × (级别/音标/释义)，级别词 16,241（柯林斯缓存级别标签 + 开源考研/雅思词表）+ 64,199 无级别兜底词（柯林斯缓存全量，仅音标/释义兜底，不参与补缺）。
+- 资产 `assets/word_levels.tsv`：80,440 词 × (级别/英标/美标/释义/四级标志)，级别词 16,241（柯林斯缓存级别标签 + 开源考研/雅思词表）+ 64,199 无级别兜底词（柯林斯缓存全量，仅音标/释义兜底，不参与补缺）。音标**英/美双列**（源 kd_data.db pron 英/美；英 35,124、美 36,546，缺失列留空由 LLM 兜底）。
 - 分析时句子分词 → `HashSet` 查表（O(1) 每词，含变形还原）→ 未被 LLM 关键词覆盖的级别词追加为 CardWord（上限 5 个/卡），并显示级别角标；LLM 关键词本身命中级别表也补角标，未命中则用兜底词补音标/释义。
+- **变形还原两层**（等价 GoldenDict 的 Hunspell 形态层，但标准 en_US 词典把不规则变形列为独立词条、规则推导不出 knelt→kneel，故用代码内 IRREGULAR 映射表）：规则变形 `forms()` 推导（-s/-es/-ies/-ed/-ing 含双写去一）+ 不规则映射表（went→go、knelt→kneel、mice→mouse、better→good 等约 250 条）。查词/音标/原型还原共用该两层。
 - **简单词过滤**：LLM 关键词命中词表且为四级基础词（fog/racket/wake 类）→ 剔除；词表未收录的词保留。
 - 级别词不带 LLM 语境释义，展示词表释义；音标优先柯林斯 IPA（空串归一为 null，避免空行）。
-- 级别角标显示在音标下一行（无音标则在词行下方），字体与音标一致（12sp 弱色），标记：六级→CET6、专四→TEM4、专八→TEM8、雅思→IELTS、考研→考研；无级别不显示。
+- v6 起重点词元信息一行展示（详情页/复习页），全部中点号隔开、缺项不显示：`英 /ˈluːmd/ · 美 /luːm/ · 原型 loom · CET6`；标记映射：六级→CET6、专四→TEM4、专八→TEM8、雅思→IELTS、考研→考研。
 
 ### 6.6 术语表（全局，可选）
 - 设置中维护多行术语表（`tolerance → 公差`）；分析请求注入 system prompt「以下术语必须按指定译法翻译」，对所有来源生效。按小说/来源分组的术语表列入 v1.5。

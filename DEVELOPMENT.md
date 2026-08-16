@@ -36,7 +36,7 @@ Gradle: 使用 wrapper（8.9）
 app/src/main/
 ├── assets/
 │   ├── analyze_prompt.txt          # LLM 分析 prompt（用户底稿 + JSON 输出约束）
-│   └── word_levels.tsv             # 重点词级别表：word<TAB>级别<TAB>音标<TAB>释义
+│   └── word_levels.tsv             # 重点词级别表：word<TAB>级别<TAB>英标<TAB>美标<TAB>释义<TAB>四级标志
 │                                    # 级别: 六级/考研/雅思/专四/专八（缺省列留空）
 ├── java/com/readlet/app/
 │   ├── ReadletApp.kt               # Application：DB/仓库/LLM/设置/词级表 单例装配
@@ -91,6 +91,7 @@ insertCard(text, source) → status=ANALYZING
   - 级别词 16,241：六级 2535 + 考研 2572 + 雅思 2807 + 专四 2592 + 专八 5735
   - **无级别兜底词 64,199**（柯林斯缓存 `~/.cache/kdcache/kd_data.db` 全量单 token 词，仅提供音标/释义兜底，不参与补缺、不显示角标）
 - 数据源：本地柯林斯词典缓存（`kd_data.db`：音标/释义，84k 词）+ 开源词表（考研/雅思/六级/专四/专八级别标签）。TSV 生成时用 kd_data 回填了级别词的音标缺口（9,571 缺音标中 5,312 个已回填，如 loom → [luːm]）。
+- 音标缺口维护：`tools/fill_phonetics.py`（有道词典页面抓取英/美音标，幂等、断点续跑）——kd_data 无数据的词用 `python3 tools/fill_phonetics.py` 批量补。
 - 优先级（一词多表取高）：专八 > 雅思 > 考研 > 六级 > 专四。
 - 运行时：`WordLevels` 启动时加载为 `HashMap<word, Entry>`；查词走**变形还原**（原形 → ing/ed/ies/es/s 后缀剥离回退），O(1) 每词，零 LLM 成本。
 - 分析时对已分析句子做补充：句中每个 token 查表，命中且未被 LLM 关键词覆盖（含词组包含）则加为 CardWord（仅限**有级别**的词，上限 5 个）；LLM 关键词本身命中级别也补角标，未命中词表则用兜底词的音标/释义。

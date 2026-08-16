@@ -391,7 +391,7 @@ private fun LibRow(item: InboxItem, seq: Int, query: String, onClick: () -> Unit
             learned > 0 -> "已学 $learned 次"
             else -> "未开始"
         }
-        MetaLine("${item.card.createdAt.toDateTimeString()} $state")
+        MetaLine("${item.card.createdAt.toDateTimeString()} · $state")
     }
     if (confirmDelete) {
         AlertDialog(

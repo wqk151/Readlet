@@ -38,6 +38,7 @@ import com.readlet.app.data.db.Card
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.ui.AppViewModel
 import com.readlet.app.ui.EmptyHint
+import com.readlet.app.ui.KeywordMetaLine
 import com.readlet.app.ui.Keywords
 import com.readlet.app.ui.SentenceText
 import com.readlet.app.ui.theme.Amber
@@ -140,7 +141,7 @@ private fun ReviewHead(session: com.readlet.app.ui.ReviewSession) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "只含你点过「开始学习」的卡片",
+                "只含你加入复习的卡片",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -208,50 +209,36 @@ private fun Flashcard(
                         val split = remember(w) { Keywords.splitPos(w.meaningInContext ?: "") }
                         val pos = w.pos ?: split.first
                         val meaning = split.second
-                        // 原型显示在音标行：`/luːmd/ · 原型 loom`，无音标时该行只显示原型。
-                        val lemma = lemmaOf(w.word)
-                        // 词+词性一行、音标行（含原型）、级别标记在音标下一行、释义紧随其后。
-                        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    w.word,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = HighlightOrange,
+                            // 原型：存储值（LLM 提供 / 分析时词表兜底）优先，旧数据渲染时词表查表兜底。
+                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        w.word,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = HighlightOrange,
+                                    )
+                                    pos?.let { p ->
+                                        Text(p, fontSize = 12.sp, color = Blue, modifier = Modifier.padding(start = 6.dp))
+                                    }
+                                }
+                                KeywordMetaLine(
+                                    word = w.word,
+                                    phonetic = w.phonetic,
+                                    phoneticUs = w.phoneticUs,
+                                    level = w.level,
+                                    lemma = w.lemma ?: lemmaOf(w.word),
                                 )
-                                pos?.let { p ->
-                                    Text(p, fontSize = 12.sp, color = Blue, modifier = Modifier.padding(start = 6.dp))
+                                meaning.takeIf { it.isNotBlank() }?.let { m ->
+                                    Text(
+                                        m,
+                                        fontSize = 13.sp,
+                                        lineHeight = 20.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
                                 }
                             }
-                            val phonetic = w.phonetic?.takeIf { it.isNotBlank() }
-                            if (phonetic != null || lemma != null) {
-                                Text(
-                                    listOfNotNull(phonetic, lemma?.let { "原型 $it" }).joinToString(" · "),
-                                    fontSize = 12.sp,
-                                    color = Muted,
-                                    modifier = Modifier.padding(top = 1.dp),
-                                )
-                            }
-                            // 级别标记在音标下一行（无音标则在词行下方），无级别不显示。
-                            // 字体与音标行一致（12sp Muted 无背景），避免标签式强调抢视线。
-                            Keywords.levelLabel(w.level)?.let { lvl ->
-                                Text(
-                                    lvl,
-                                    fontSize = 12.sp,
-                                    color = Muted,
-                                    modifier = Modifier.padding(top = 1.dp),
-                                )
-                            }
-                            meaning.takeIf { it.isNotBlank() }?.let { m ->
-                                Text(
-                                    m,
-                                    fontSize = 13.sp,
-                                    lineHeight = 20.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                        }
                     }
                 } else {
                     Text("（本句为单词/短语卡，见上）", fontSize = 12.sp, color = Muted)

@@ -35,6 +35,7 @@ import com.readlet.app.data.db.Card
 import com.readlet.app.data.db.CardStatus
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.ui.AppViewModel
+import com.readlet.app.ui.KeywordMetaLine
 import com.readlet.app.ui.Keywords
 import com.readlet.app.ui.SentenceText
 import com.readlet.app.ui.StatusChip
@@ -120,9 +121,7 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                             val split = remember(w) { Keywords.splitPos(w.meaningInContext ?: "") }
                             val pos = w.pos ?: split.first
                             val meaning = split.second
-                            // 原型显示在音标行：`/luːmd/ · 原型 loom`，无音标时该行只显示原型。
-                            val lemma = remember(w) { vm.lemmaOf(w.word) }
-                            // 词+词性一行、音标行（含原型）、级别标记在音标下一行、释义紧随其后：
+                            // 词+词性一行；元信息一行（英/美音标 · 原型 · 级别，中点号隔开）；释义紧随其后：
                             // 长词组音标不再被挤进窄列堆叠，与释义间也不留空白。
                             Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -131,25 +130,14 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                                         Text(" $it", fontSize = 12.sp, color = Blue)
                                     }
                                 }
-                                val phonetic = w.phonetic?.takeIf { it.isNotBlank() }
-                                if (phonetic != null || lemma != null) {
-                                    Text(
-                                        listOfNotNull(phonetic, lemma?.let { "原型 $it" }).joinToString(" · "),
-                                        fontSize = 12.sp,
-                                        color = Muted,
-                                        modifier = Modifier.padding(top = 1.dp),
-                                    )
-                                }
-                                // 级别标记在音标下一行（无音标则在词行下方），无级别不显示。
-                                // 字体与音标行一致（12sp Muted 无背景），避免标签式强调抢视线。
-                                Keywords.levelLabel(w.level)?.let { lvl ->
-                                    Text(
-                                        lvl,
-                                        fontSize = 12.sp,
-                                        color = Muted,
-                                        modifier = Modifier.padding(top = 1.dp),
-                                    )
-                                }
+                                // 原型：存储值（LLM 提供 / 分析时词表兜底）优先，旧数据渲染时词表查表兜底。
+                                KeywordMetaLine(
+                                    word = w.word,
+                                    phonetic = w.phonetic,
+                                    phoneticUs = w.phoneticUs,
+                                    level = w.level,
+                                    lemma = w.lemma ?: remember(w) { vm.lemmaOf(w.word) },
+                                )
                                 meaning.takeIf { it.isNotBlank() }?.let { m ->
                                     Text(
                                         m,
@@ -223,7 +211,7 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                     when {
                         c.mastered -> ActionButton("取消已掌握", Amber) { vm.unmasterCard(c.id) }
                         c.status == CardStatus.ANALYZED && c.dueAt == null ->
-                            ActionButton("开始学习（明天起进入复习排程）", Green) { vm.learnCard(c.id) }
+                            ActionButton("加入复习", Green) { vm.learnCard(c.id) }
                         c.status == CardStatus.FAILED || c.status == CardStatus.PENDING ->
                             // 分析中禁用按钮，防重复点击
                             ActionButton(
