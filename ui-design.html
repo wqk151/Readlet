@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Readlet · UI 原型（v2 · 学习流程改版）</title>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --card: #ffffff;
+    --ink: #23262b;
+    --muted: #8a857c;
+    --line: #e8e3d8;
+    --accent: #2f6f4f;
+    --accent-soft: #e3efe8;
+    --amber: #b07d2b;
+    --red: #b0524a;
+    --blue: #3b6ea5;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+    background: #d9d5cc;
+    display: flex; justify-content: center; padding: 32px 16px;
+  }
+  .phone {
+    width: 390px; height: 844px; background: var(--bg); border-radius: 44px;
+    overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.35);
+    border: 10px solid #1c1d1f; display: flex; flex-direction: column;
+    position: relative;
+  }
+  .app { display: flex; flex-direction: column; height: 100%; }
+  header { padding: 20px 20px 12px; display: flex; align-items: center; gap: 8px; }
+  header h1 { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+  .count { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+  .badge { font-size: 12px; background: #fff3d6; color: var(--amber); border-radius: 999px; padding: 5px 10px; font-weight: 600; margin-left: auto; }
+  main { flex: 1; overflow-y: auto; padding: 4px 16px 16px; }
+  main::-webkit-scrollbar { width: 4px; }
+  main::-webkit-scrollbar-thumb { background: #cfc8ba; border-radius: 2px; }
+  main::-webkit-scrollbar-track { background: transparent; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .card-row { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
+  .card-row:hover { border-color: var(--accent); }
+  .row-top { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .src { font-weight: 600; color: var(--ink); }
+  .seq { font-size: 11px; color: var(--muted); font-weight: 700; }
+  .chip { margin-left: auto; font-size: 11px; border-radius: 999px; padding: 3px 9px; }
+  .chip.done { background: var(--accent-soft); color: var(--accent); }
+  .chip.pending { background: #fdf0f0; color: var(--red); }
+  .chip.busy { background: #e8eef8; color: var(--blue); }
+  .chip.learn { background: #fdf6e7; color: var(--amber); }
+  .sent { font-size: 15px; line-height: 1.55; color: var(--ink); font-family: Georgia, "Times New Roman", serif; }
+  .kw { margin-top: 8px; font-size: 12px; color: var(--accent); font-weight: 600; }
+  .hint { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 20px; line-height: 1.7; }
+  .hint b { color: var(--ink); }
+
+  .search { width: 100%; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-bottom: 12px; outline: none; }
+  .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter { font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; }
+  .filter.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .lib-item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .lib-item .sent { font-size: 14px; }
+  .lib-kw { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag { font-size: 11px; background: var(--accent-soft); color: var(--accent); border-radius: 6px; padding: 3px 8px; }
+  .tag.lvl { background: #f1ecdf; color: var(--amber); }
+  .lib-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  .rev-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .ring { width: 64px; height: 64px; border-radius: 50%; background: conic-gradient(var(--accent) 0deg 0deg, var(--line) 0deg); display: flex; align-items: center; justify-content: center; }
+  .ring span { width: 50px; height: 50px; border-radius: 50%; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+  .rev-info { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .rev-info b { color: var(--ink); }
+  .flashcard { background: var(--card); border-radius: 20px; border: 1px solid var(--line); padding: 22px 20px; min-height: 380px; display: flex; flex-direction: column; }
+  .fc-seq { font-size: 11px; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  .fc-front { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+  .fc-front .sent { font-size: 19px; line-height: 1.65; }
+  .hl { color: var(--accent); font-weight: 700; text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .flip-btn { align-self: center; background: var(--accent); color: #fff; border: none; border-radius: 999px; padding: 11px 34px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .fc-back { display: none; flex-direction: column; gap: 14px; }
+  .flashcard.flipped .fc-front { display: none; }
+  .flashcard.flipped .fc-back { display: flex; }
+  .trans { font-size: 15px; color: var(--ink); line-height: 1.6; padding-bottom: 12px; border-bottom: 1px dashed var(--line); }
+  .words { display: flex; flex-direction: column; gap: 10px; }
+  .word b { font-size: 15px; }
+  .word i { font-style: normal; font-size: 12px; color: var(--muted); margin: 0 6px; }
+  .word em { font-style: normal; font-size: 12px; color: var(--blue); }
+  .word .lvl { font-style: normal; font-size: 10px; color: var(--amber); background: #f1ecdf; border-radius: 5px; padding: 1px 5px; margin-right: 4px; }
+  .word p { font-size: 13px; color: var(--ink); margin-top: 2px; }
+  .grammar { font-size: 13px; background: #f4f1e9; border-radius: 12px; padding: 12px; line-height: 1.6; }
+  .grammar b { color: var(--accent); }
+  .grade { display: flex; gap: 8px; margin-top: 4px; }
+  .grade button { flex: 1; border: none; border-radius: 12px; padding: 12px 0; font-size: 13px; font-weight: 700; cursor: pointer; color: #fff; }
+  .grade .again { background: var(--red); }
+  .grade .hard { background: var(--amber); }
+  .grade .good { background: var(--accent); }
+  .grade .easy { background: var(--blue); }
+
+  .stat-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 8px; display: flex; }
+  .stat-card > div { flex: 1; text-align: center; }
+  .stat-card b { display: block; font-size: 20px; }
+  .stat-card span { font-size: 11px; color: var(--muted); }
+  .heatmap { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 8px; }
+  .hm-cell { aspect-ratio: 1; border-radius: 3px; background: #efece3; }
+  .hm-cell.l1 { background: #d9e8dd; }
+  .hm-cell.l2 { background: #aecfb8; }
+  .hm-cell.l3 { background: #6fae85; }
+  .hm-cell.l4 { background: var(--accent); }
+  .chart-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 8px; }
+  .chart-card svg { width: 100%; display: block; }
+  .word-row { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; cursor: pointer; }
+  .word-row b { font-size: 15px; color: var(--accent); }
+  .word-row .wcount { font-size: 12px; color: var(--muted); margin-left: 10px; }
+  .word-row .arrow { margin-left: auto; color: var(--muted); font-size: 18px; }
+  .practice-btn { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; margin-bottom: 12px; }
+  .w-sent { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .w-sent .sent { font-size: 14px; margin-bottom: 8px; }
+  .w-sent .row-top { margin-bottom: 0; }
+
+  .detail { position: absolute; inset: 0; background: var(--bg); z-index: 5; overflow-y: auto; }
+  .detail .back { border: none; background: none; font-size: 14px; color: var(--accent); font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+  .d-card { background: var(--card); border-radius: 20px; padding: 20px; }
+  .d-card .sent { font-size: 18px; line-height: 1.7; margin-bottom: 12px; }
+  .d-trans { font-size: 15px; color: #55524b; margin-bottom: 16px; }
+  .d-sec { font-size: 12px; font-weight: 800; color: var(--muted); letter-spacing: 1px; margin: 16px 0 8px; }
+  .d-word { display: flex; align-items: baseline; gap: 8px; font-size: 14px; margin-bottom: 8px; }
+  .d-word b { font-size: 15px; color: var(--accent); }
+  .d-word i { font-style: normal; color: var(--muted); font-size: 12px; }
+  .d-word span { font-size: 13px; }
+  .learn-btn { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 16px; }
+  .learn-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .learned-line { font-size: 13px; color: var(--muted); text-align: center; margin-top: 14px; }
+  .learned-line b { color: var(--accent); }
+
+  .bottom-nav { display: flex; border-top: 1px solid var(--line); background: var(--card); padding: 8px 8px 14px; gap: 6px; }
+  .bottom-nav button { flex: 1; border: none; background: none; padding: 10px 0; font-size: 12px; color: var(--muted); font-weight: 600; border-radius: 12px; cursor: pointer; }
+  .bottom-nav button.active { background: var(--accent-soft); color: var(--accent); }
+  .note { margin-top: 14px; text-align: center; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="app">
+    <header>
+      <h1>Readlet</h1>
+      <span class="count">共 42 条</span>
+      <span class="badge">🔥 连续 5 天</span>
+    </header>
+    <main>
+      <section id="screen-library" class="screen active">
+        <input class="search" placeholder="搜索句子 / 单词…" />
+        <div class="filters">
+          <span class="filter on">全部</span>
+          <span class="filter">待学习</span>
+          <span class="filter">未复习</span>
+          <span class="filter">已掌握</span>
+          <span class="filter">待分析</span>
+        </div>
+        <div class="lib-item">
+          <div class="row-top">
+            <span class="seq">#42</span><span class="src">📖 微信读书</span><span>今天</span>
+            <span class="chip learn">待学习</span>
+          </div>
+          <p class="sent">"The fog rolled in from the sea, muffling the distant harbor lights."</p>
+          <div class="lib-kw"><span class="tag">fog</span><span class="tag">muffling</span><span class="tag">harbor</span><span class="tag lvl">六级 trot</span></div>
+          <div class="lib-meta"><span>点开学习 → 开始复习</span><span>未开始</span></div>
+        </div>
+        <div class="lib-item">
+          <div class="row-top">
+            <span class="seq">#41</span><span class="src">🌐 Chrome</span><span>今天</span>
+            <span class="chip done">已分析</span>
+          </div>
+          <p class="sent">"He had the peculiar habit of humming Wagner while he cooked."</p>
+          <div class="lib-kw"><span class="tag">peculiar</span><span class="tag">humming</span></div>
+          <div class="lib-meta"><span>已学习 · 明天开始复习</span><span>已学 2 次</span></div>
+        </div>
+        <div class="lib-item">
+          <div class="row-top">
+            <span class="seq">#37</span><span class="src">📚 Kindle</span><span>昨天</span>
+            <span class="chip done">已分析</span>
+          </div>
+          <p class="sent">"The verdict left the family shell-shocked and the legal team scrambling."</p>
+          <div class="lib-kw"><span class="tag">shell-shocked</span><span class="tag">scrambling</span><span class="tag lvl">专八 hurtle</span></div>
+          <div class="lib-meta"><span>已学习 · 明天开始复习</span><span>已学 1 次</span></div>
+        </div>
+        <div class="lib-item">
+          <div class="row-top">
+            <span class="seq">#36</span><span class="src">✍️ 系统分享</span><span>昨天</span>
+            <span class="chip busy">分析中…</span>
+          </div>
+          <p class="sent">"She was, by any measure, a reluctant convert to the cause."</p>
+          <div class="lib-meta"><span>分析完成即可学习</span><span>未开始</span></div>
+        </div>
+        <div class="lib-item">
+          <div class="row-top">
+            <span class="seq">#35</span><span class="src">📖 微信读书</span><span>8/12</span>
+            <span class="chip done">已分析</span>
+          </div>
+          <p class="sent">"He bent down and pulled his wand out of the troll's nose."</p>
+          <div class="lib-kw"><span class="tag">wand</span><span class="tag">troll</span></div>
+          <div class="lib-meta"><span>已学习 · 下次 8/17</span><span>已学 3 次</span></div>
+        </div>
+        <div class="note">序号 = 收藏顺序，与复习页编号对应</div>
+      </section>
+
+      <section id="screen-review" class="screen">
+        <div class="rev-head">
+          <div class="ring"><span>0/15</span></div>
+          <div class="rev-info">
+            <b>今日待复习 15</b><br/>已学习 3 · 已学 0<br/>只含你点过「开始学习」的卡片
+          </div>
+        </div>
+        <div class="flashcard" id="fc">
+          <div class="fc-seq">#42 · 已学 1 次</div>
+          <div class="fc-front">
+            <p class="sent">The fog rolled in from the sea, <span class="hl">muffling</span> the distant <span class="hl">harbor</span> lights.</p>
+            <button class="flip-btn" onclick="flip()">显示答案</button>
+          </div>
+          <div class="fc-back">
+            <div class="trans">雾从海面涌来，压低（减弱）了远处港口的灯火。</div>
+            <div class="words">
+              <div class="word"><b>muffling</b><i>/ˈmʌflɪŋ/</i><em>v.</em><p>muffle 的现在分词：使(声音/光线)变低沉、减弱；这里指雾气模糊了灯光</p></div>
+              <div class="word"><b>harbor</b><i>/ˈhɑːrbər/</i><em>n.</em><p>港口；港湾</p></div>
+              <div class="word"><span class="lvl">六级</span><b>trot</b><i>/trɑt/</i><em>n.</em><p>（人）慢跑；马小跑的步态；小跑的马蹄声</p></div>
+            </div>
+            <div class="grammar"><b>句法：</b>主干 The fog rolled in（主+谓）；伴随状语 muffling the distant harbor lights（现在分词短语，修饰主语 fog，表伴随状态）。</div>
+            <div class="grade">
+              <button class="again" onclick="grade()">重来</button>
+              <button class="hard" onclick="grade()">困难</button>
+              <button class="good" onclick="grade()">良好</button>
+              <button class="easy" onclick="grade()">简单</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-stats" class="screen">
+        <div class="stat-card">
+          <div><b>18</b><span>本月学习天数</span></div>
+          <div><b>62%</b><span>打卡率</span></div>
+          <div><b>237</b><span>总卡片</span></div>
+          <div><b>143</b><span>词/词组</span></div>
+        </div>
+        <div class="d-sec">学习日历 · 近 12 周</div>
+        <div class="heatmap" id="heatmap"></div>
+        <div class="d-sec">近 30 天复习量</div>
+        <div class="chart-card">
+          <svg viewBox="0 0 320 100" preserveAspectRatio="none">
+            <polygon points="0,52 11,68 22,40 33,60 44,80 55,100 66,88 77,76 88,28 99,20 110,64 121,56 132,72 143,84 154,92 165,100 176,80 187,68 198,44 209,36 220,52 231,64 242,76 253,88 264,68 275,60 286,72 297,80 308,64 319,40 319,100 0,100" style="fill:rgba(47,111,79,.12)"/>
+            <polyline points="0,52 11,68 22,40 33,60 44,80 55,100 66,88 77,76 88,28 99,20 110,64 121,56 132,72 143,84 154,92 165,100 176,80 187,68 198,44 209,36 220,52 231,64 242,76 253,88 264,68 275,60 286,72 297,80 308,64 319,40" style="fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/>
+          </svg>
+        </div>
+        <div class="d-sec">累计卡片</div>
+        <div class="chart-card">
+          <svg viewBox="0 0 320 100" preserveAspectRatio="none">
+            <polygon points="0,96 40,90 80,84 120,74 160,62 200,48 240,34 280,20 320,6 320,100 0,100" style="fill:rgba(47,111,79,.12)"/>
+            <polyline points="0,96 40,90 80,84 120,74 160,62 200,48 240,34 280,20 320,6" style="fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/>
+          </svg>
+        </div>
+        <div class="d-sec">高频难点词 · 按出现频率</div>
+        <div class="word-row" onclick="openWord()">
+          <b>muffling</b><span class="wcount">出现 3 次 · 2 句</span><span class="arrow">›</span>
+        </div>
+        <div class="word-row" onclick="openWord()">
+          <b>harbor</b><span class="wcount">出现 3 次 · 2 句</span><span class="arrow">›</span>
+        </div>
+        <div class="word-row" onclick="openWord()">
+          <b>peculiar</b><span class="wcount">出现 2 次 · 1 句</span><span class="arrow">›</span>
+        </div>
+        <div class="word-row" onclick="openWord()">
+          <b>scrambling</b><span class="wcount">出现 2 次 · 1 句</span><span class="arrow">›</span>
+        </div>
+      </section>
+
+      <section id="screen-detail" class="screen detail">
+        <button class="back" onclick="closeDetail()">← 返回卡片库</button>
+        <div class="d-card">
+          <p class="sent">"The fog rolled in from the sea, <span class="hl">muffling</span> the distant <span class="hl">harbor</span> lights."</p>
+          <div class="d-trans">雾从海面涌来，压低（减弱）了远处港口的灯火。</div>
+          <div class="d-sec">重点单词</div>
+          <div class="d-word"><b>muffling</b><i>/ˈmʌflɪŋ/</i><span>v. 使(声音/光线)变低沉，减弱</span></div>
+          <div class="d-word"><b>harbor</b><i>/ˈhɑːrbər/</i><span>n. 港口</span></div>
+          <div class="d-word"><span class="lvl">六级</span><b>trot</b><i>/trɑt/</i><span>n. （人）慢跑；马小跑的步态</span></div>
+          <div class="d-sec">句法分析</div>
+          <div class="grammar">主干：The fog <b>rolled in</b>（主谓）。<br/>附加：muffling the distant harbor lights 为<b>现在分词伴随状语</b>，表示雾涌来时伴随的结果/状态。</div>
+          <button class="learn-btn" onclick="learned()">开始学习（明天起进入复习排程）</button>
+          <div class="learn-hint">学习 = 通读本页译文与重点词；未学习的卡不会出现在复习里</div>
+        </div>
+      </section>
+
+      <section id="screen-word" class="screen detail">
+        <button class="back" onclick="closeWord()">← 返回统计</button>
+        <button class="practice-btn">把包含 muffling 的 2 句加入加练</button>
+        <div class="w-sent">
+          <p class="sent">"The fog rolled in from the sea, <span class="hl">muffling</span> the distant harbor lights."</p>
+          <div class="row-top"><span>📖 微信读书</span><span>muffling</span></div>
+        </div>
+        <div class="w-sent">
+          <p class="sent">"The train approached, <span class="hl">muffling</span> every sound beneath its iron roar."</p>
+          <div class="row-top"><span>📚 Kindle</span><span>muffling</span></div>
+        </div>
+        <div class="note">加练不计入 SRS 排程，不影响原有复习计划</div>
+      </section>
+    </main>
+    <nav class="bottom-nav">
+      <button data-target="library" class="active">🗂 卡片库</button>
+      <button data-target="review">🎴 复习</button>
+      <button data-target="stats">📊 统计</button>
+    </nav>
+  </div>
+</div>
+<script>
+  const btns = document.querySelectorAll('.bottom-nav button');
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + b.dataset.target).classList.add('active');
+  }));
+  function flip() { document.getElementById('fc').classList.add('flipped'); }
+  function grade() { document.getElementById('fc').classList.remove('flipped'); }
+  function openDetail() { document.getElementById('screen-detail').classList.add('active'); }
+  function closeDetail() { document.getElementById('screen-detail').classList.remove('active'); }
+  function openWord() { document.getElementById('screen-word').classList.add('active'); }
+  function closeWord() { document.getElementById('screen-word').classList.remove('active'); }
+  function learned() {
+    const btn = document.querySelector('.learn-btn');
+    btn.style.background = 'var(--accent-soft)';
+    btn.style.color = 'var(--accent)';
+    btn.textContent = '✓ 已学习 · 明天 8/17 进入复习排程';
+    btn.disabled = true;
+  }
+  const hm = document.getElementById('heatmap');
+  for (let w = 0; w < 12; w++) {
+    for (let d = 0; d < 7; d++) {
+      const v = Math.floor(5 + Math.sin(w * 2 + d * 1.7) * 4 + Math.cos(d * 2.3 - w) * 3);
+      const cell = document.createElement('div');
+      cell.className = 'hm-cell' + (v > 0 ? ' l' + Math.min(4, Math.ceil(v / 2.5)) : '');
+      hm.appendChild(cell);
+    }
+  }
+</script>
+</body>
+</html>

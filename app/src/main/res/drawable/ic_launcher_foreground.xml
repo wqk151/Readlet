@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 三条"句子文字线"，中间一条琥珀高亮 = 句子中高亮重点词 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.75"
+        android:pathData="M30,38 h48 a4,4 0 0 1 4,4 v0 a4,4 0 0 1 -4,4 h-48 a4,4 0 0 1 -4,-4 v0 a4,4 0 0 1 4,-4 z" />
+    <path
+        android:fillColor="#F2B94A"
+        android:pathData="M30,50 h36 a4,4 0 0 1 4,4 v0 a4,4 0 0 1 -4,4 h-36 a4,4 0 0 1 -4,-4 v0 a4,4 0 0 1 4,-4 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.75"
+        android:pathData="M30,62 h42 a4,4 0 0 1 4,4 v0 a4,4 0 0 1 -4,4 h-42 a4,4 0 0 1 -4,-4 v0 a4,4 0 0 1 4,-4 z" />
+</vector>

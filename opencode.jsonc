@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "code-review-graph": {
+      "type": "local",
+      "command": [
+        "/home/wqk/mambaforge/envs/py10/bin/python3.10",
+        "-m",
+        "code_review_graph",
+        "serve",
+        "--repo",
+        "/home/wqk/data/workspace/python/english-push"
+      ]
+    }
+  }
+}

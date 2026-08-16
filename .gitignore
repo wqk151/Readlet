@@ -1,0 +1,17 @@
+# Added by code-review-graph
+.code-review-graph/
+
+# 发布签名（严禁入库）
+keystore.properties
+*.keystore
+
+# Gradle / 构建产物
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+
+# 本地工具配置
+.claude/
