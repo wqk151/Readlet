@@ -67,8 +67,6 @@ fun StatsScreen(vm: AppViewModel) {
         Heatmap(weeks, vm.heatmapMonths(), vm.heatmapToday())
         SectionTitle("近 30 天复习量")
         LineChart(recent.map { it.second.toFloat() }, label = { i -> vm.formatDay(recent[i].first) })
-        SectionTitle("累计复习次数")
-        LineChart(cumulative(recent), label = { i -> vm.formatDay(recent[i].first) })
         SectionTitle("高频难点词 · 按出现频率")
         if (stats.wordFreq.isEmpty()) {
             Text("分析句子后，这里会汇总反复出现的高频难点词。", fontSize = 13.sp, color = Muted)
@@ -297,11 +295,6 @@ private fun LineChart(values: List<Float>, label: (Int) -> String) {
             Text(label(0), fontSize = 10.sp, color = Muted)
             Text(label(values.size - 1), fontSize = 10.sp, color = Muted)
         }
-}
-
-private fun cumulative(recent: List<Pair<Long, Int>>): List<Float> {
-    var acc = 0f
-    return recent.map { (_, c) -> acc += c; acc }
 }
 
 /** 难点词行：词独占一行（超长截断），频率信息在下方，避免长词组把行撑开留大片空白。 */
