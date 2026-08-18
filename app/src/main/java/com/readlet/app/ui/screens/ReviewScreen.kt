@@ -1,5 +1,8 @@
 package com.readlet.app.ui.screens
 
+import android.graphics.Typeface
+import android.util.TypedValue
+import android.widget.TextView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,9 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.readlet.app.data.db.Card
 import com.readlet.app.data.db.CardWord
@@ -40,7 +45,7 @@ import com.readlet.app.ui.AppViewModel
 import com.readlet.app.ui.EmptyHint
 import com.readlet.app.ui.KeywordMetaLine
 import com.readlet.app.ui.Keywords
-import com.readlet.app.ui.SentenceText
+import com.readlet.app.ui.sentenceSpannable
 import com.readlet.app.ui.theme.Amber
 import com.readlet.app.ui.theme.Blue
 import com.readlet.app.ui.theme.Green
@@ -247,13 +252,40 @@ private fun Flashcard(
             Spacer(Modifier.height(16.dp))
             GradeRow { onGrade(it) }
         } else {
-            // 正面：句子 + 全部重点词/词组高亮（可滚动，长句完整显示）
+            // 正面：句子 + 全部重点词/词组高亮（可滚动，长句完整显示）。
+            // 原生 TextView 承接系统划词工具栏（复制/全选 + 欧路词典等 PROCESS_TEXT 应用）——
+            // Compose SelectionContainer 工具栏不含 PROCESS_TEXT 应用，见 docs/adr/0001。
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 24.dp),
             ) {
-                SentenceText(card.text, large = true, highlightWords = words.map { it.word })
+                val spannable = remember(card.text, words) {
+                    sentenceSpannable(card.text, words.map { it.word })
+                }
+                // AndroidView 的 factory/update 不是 @Composable 上下文，颜色需先在此捕获。
+                val sentenceColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { ctx ->
+                        TextView(ctx).apply {
+                            setTextIsSelectable(true)
+                            typeface = Typeface.SERIF
+                            // 与 SentenceLarge 一致：19sp，行高 32sp（行距余量 13sp）
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+                            setLineSpacing(
+                                TypedValue.applyDimension(
+                                    TypedValue.COMPLEX_UNIT_SP, 13f, resources.displayMetrics,
+                                ),
+                                1f,
+                            )
+                        }
+                    },
+                    update = { tv ->
+                        tv.setTextColor(sentenceColor)
+                        tv.setText(spannable)
+                    },
+                )
             }
             if (isPractice) {
                 Text("加练卡片 · 不改变排程", fontSize = 12.sp, color = Muted)

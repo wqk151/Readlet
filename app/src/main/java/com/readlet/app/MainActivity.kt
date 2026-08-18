@@ -13,6 +13,9 @@ class MainActivity : ComponentActivity() {
 
     private val vm: AppViewModel by viewModels()
 
+    /** 前台标记：划词工具栏里点 Readlet 自己时判定为「划词查库」而非外部「划词采集」。 */
+    private var foreground = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         vm.onAppStart()
@@ -24,6 +27,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        foreground = true
+    }
+
+    override fun onPause() {
+        foreground = false
+        super.onPause()
+    }
+
     /** 分享/文本选择进入（App 已在运行：singleTask 走 onNewIntent）。 */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -31,7 +44,10 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** 分享/文本选择进入：接收后立刻退回后台，不打断原 app 的阅读。 */
+    /**
+     * 分享/划词进入：外部来源静默采集后立刻退回后台，不打断原 app 的阅读；
+     * 前台自来源（复习正面划词点工具栏里的 Readlet）→ 划词查库，打开词频详情，不采集、不退回。
+     */
     private fun handleIntent(intent: Intent?) {
         intent ?: return
         var handled = false
@@ -43,8 +59,13 @@ class MainActivity : ComponentActivity() {
             }
             Intent.ACTION_PROCESS_TEXT -> {
                 val text = intent.getStringExtra(Intent.EXTRA_PROCESS_TEXT) ?: return
-                vm.onShared(text, sourceLabel(intent))
-                handled = true
+                if (foreground) {
+                    // 划词查库：Readlet 在前台时收到 PROCESS_TEXT，来源只可能是自己的划词工具栏
+                    vm.openWord(text.trim())
+                } else {
+                    vm.onShared(text, sourceLabel(intent))
+                    handled = true
+                }
             }
         }
         // 静默采集：入库与异步分析在后台完成，用户停留在分享来源的 app。

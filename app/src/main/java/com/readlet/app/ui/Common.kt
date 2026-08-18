@@ -1,5 +1,9 @@
 package com.readlet.app.ui
 
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -89,27 +94,45 @@ fun SentenceText(text: String, large: Boolean = false, medium: Boolean = false, 
         // 淡橙高亮：复习页重点词与主绿操作按钮区分开。
         val highlight = HighlightOrange
         val annotated = remember(text, highlightWords, highlight) {
-            val keywords = highlightWords.mapNotNull { it.trim().takeIf(String::isNotBlank) }
-                .distinct()
-                .sortedByDescending { it.length }
             buildAnnotatedString {
                 append(text)
-                if (keywords.isNotEmpty()) {
-                    val pattern = Regex("(?i)\\b(${keywords.joinToString("|") { Regex.escape(it) }})\\b")
-                    pattern.findAll(text).forEach { m ->
-                        addStyle(
-                            SpanStyle(
-                                color = highlight,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            m.range.first, m.range.last + 1,
-                        )
-                    }
+                highlightRegex(highlightWords)?.findAll(text)?.forEach { m ->
+                    addStyle(
+                        SpanStyle(color = highlight, fontWeight = FontWeight.Bold),
+                        m.range.first, m.range.last + 1,
+                    )
                 }
             }
         }
         Text(annotated, style = base)
     }
+}
+
+/** 高亮匹配正则：词组按长度降序优先匹配，findAll 顺序扫描天然不重叠；无关键词时返回 null。 */
+private fun highlightRegex(highlightWords: List<String>): Regex? {
+    val keywords = highlightWords.mapNotNull { it.trim().takeIf(String::isNotBlank) }
+        .distinct()
+        .sortedByDescending { it.length }
+    if (keywords.isEmpty()) return null
+    return Regex("(?i)\\b(${keywords.joinToString("|") { Regex.escape(it) }})\\b")
+}
+
+/** 原生 TextView 版句子：与 SentenceText 同一高亮匹配，供复习正面划词渲染（系统划词工具栏）。 */
+fun sentenceSpannable(text: String, highlightWords: List<String>): SpannableString {
+    val spannable = SpannableString(text)
+    highlightRegex(highlightWords)?.findAll(text)?.forEach { m ->
+        spannable.setSpan(
+            ForegroundColorSpan(HighlightOrange.toArgb()),
+            m.range.first, m.range.last + 1,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        spannable.setSpan(
+            StyleSpan(android.graphics.Typeface.BOLD),
+            m.range.first, m.range.last + 1,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+    }
+    return spannable
 }
 
 /** 区块标题。 */

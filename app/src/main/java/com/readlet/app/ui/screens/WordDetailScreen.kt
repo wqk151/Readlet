@@ -52,7 +52,7 @@ fun WordDetailScreen(vm: AppViewModel, word: String) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(
-            "← 返回统计",
+            "← 返回",
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
