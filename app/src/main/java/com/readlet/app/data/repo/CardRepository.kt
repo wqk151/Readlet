@@ -93,9 +93,17 @@ class CardRepository(
         return cardDao.allIdTexts().firstOrNull { (_, t) -> flatten(t).equals(flat, ignoreCase = true) }?.id
     }
 
-    /** 补分析所有 待分析/失败 的卡片（「一键分析」入口）。 */
-    suspend fun retryPending() {
-        cardDao.pendingCards().forEach { analyzeCard(it.id) }
+    /**
+     * 补分析所有 待分析/失败/卡死 的卡片（「一键分析」入口）：按顺序逐个分析，
+     * 每完成一张回调进度（跳过 inFlight 已拦截的卡也计为处理过）。
+     */
+    suspend fun analyzePending(onProgress: (Int) -> Unit = {}) {
+        var done = 0
+        cardDao.pendingCards().forEach { card ->
+            analyzeCard(card.id)
+            done++
+            onProgress(done)
+        }
     }
 
     /**

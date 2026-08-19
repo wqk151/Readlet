@@ -62,6 +62,9 @@ data class SettingsState(
 /** Toast 消息；undo=true 时 snackbar 附带「撤销」操作。 */
 data class ToastMsg(val text: String, val undo: Boolean = false)
 
+/** 一键分析批量进度；非 null 期间按钮显示「分析中 done/total」且不可点击。 */
+data class AnalyzeProgress(val total: Int, val done: Int)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = (app as ReadletApp).repository
@@ -70,6 +73,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 页面状态 ----------
     private val _tab = MutableStateFlow(Tab.Library)
     val tab: StateFlow<Tab> = _tab
+
+    private val _analyzing = MutableStateFlow<AnalyzeProgress?>(null)
+    val analyzing: StateFlow<AnalyzeProgress?> = _analyzing
 
     private val analysisTick = MutableStateFlow(0)
 
@@ -222,18 +228,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 一键分析：手动补分析所有 待分析/失败/卡死 的卡片。 */
+    /** 一键分析：手动补分析所有 待分析/失败/卡死 的卡片。批量期间按钮显示「分析中 done/total」并禁止重复触发。 */
     fun analyzeAll() {
+        if (_analyzing.value != null) return
         viewModelScope.launch {
             val count = repo.pendingCount()
             if (count == 0) {
                 showToast("没有待分析的卡片")
                 return@launch
             }
-            repo.retryPending()
-            analysisTick.value++
-            statsTick.value++
-            showToast("已开始分析 $count 张卡片")
+            _analyzing.value = AnalyzeProgress(count, 0)
+            try {
+                repo.analyzePending { done -> _analyzing.value = AnalyzeProgress(count, done) }
+                analysisTick.value++
+                statsTick.value++
+                showToast("已完成分析 $count 张卡片")
+            } finally {
+                _analyzing.value = null
+            }
         }
     }
 

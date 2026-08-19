@@ -64,6 +64,7 @@ import com.readlet.app.ui.MetaLine
 import com.readlet.app.ui.SearchMatcher
 import com.readlet.app.ui.StatusChip
 import com.readlet.app.ui.theme.Amber
+import com.readlet.app.ui.theme.Blue
 import com.readlet.app.ui.theme.Green
 import com.readlet.app.ui.theme.Muted
 import com.readlet.app.ui.theme.Red
@@ -85,6 +86,7 @@ fun LibraryScreen(vm: AppViewModel) {
     val items by vm.inboxItems.collectAsStateWithLifecycle()
     val streak by vm.streak.collectAsStateWithLifecycle()
     val seqOf by vm.cardSeq.collectAsStateWithLifecycle()
+    val analyzing by vm.analyzing.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(LibFilter.ALL) }
     var visibleCount by remember { mutableStateOf(PAGE_SIZE) }
@@ -143,21 +145,39 @@ fun LibraryScreen(vm: AppViewModel) {
                 )
             }
             // 一键分析：手动补分析所有待分析/失败卡（收藏不再自动分析）。
+            // 批量分析中 → 显示「分析中 done/total」且不可点击；结束后恢复按钮（失败卡仍计入）。
             val needAnalysis = items.count { it.card.status != CardStatus.ANALYZED }
-            if (needAnalysis > 0) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Red.copy(alpha = 0.12f))
-                        .clickable { vm.analyzeAll() }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        "一键分析 $needAnalysis",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Red,
-                    )
+            val batch = analyzing
+            if (batch != null || needAnalysis > 0) {
+                if (batch != null) {
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Blue.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            "分析中 ${batch.done}/${batch.total}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Blue,
+                        )
+                    }
+                } else {
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Red.copy(alpha = 0.12f))
+                            .clickable { vm.analyzeAll() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            "一键分析 $needAnalysis",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Red,
+                        )
+                    }
                 }
             }
             IconButton(onClick = { vm.settingsOpen.value = true }) {
@@ -190,6 +210,7 @@ fun LibraryScreen(vm: AppViewModel) {
                             item,
                             seq = seqOf[item.card.id] ?: 0,
                             query = q,
+                            batchRunning = analyzing != null,
                             onClick = {
                                 focusManager.clearFocus()
                                 vm.openDetail(item.card.id)
@@ -281,7 +302,14 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun LibRow(item: InboxItem, seq: Int, query: String, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun LibRow(
+    item: InboxItem,
+    seq: Int,
+    query: String,
+    batchRunning: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     CardSurface(onClick = onClick) {
@@ -297,8 +325,10 @@ private fun LibRow(item: InboxItem, seq: Int, query: String, onClick: () -> Unit
                 )
             }
             Spacer(Modifier.weight(1f))
-            // 角标：分析未完成 → 分析状态；已分析未学习 → 待学习；已学习 → 已分析。
+            // 角标：批量分析中 → 未完成的统一显示「分析中…」（后台实际逐个进行，先到先亮）；
+            // 否则分析未完成 → 实际状态；已分析未学习 → 待学习；已学习 → 已分析。
             when {
+                batchRunning && item.card.status != CardStatus.ANALYZED -> StatusChip(CardStatus.ANALYZING)
                 item.card.status != CardStatus.ANALYZED -> StatusChip(item.card.status)
                 item.card.dueAt == null && !item.card.mastered -> LearnChip()
                 else -> StatusChip(CardStatus.ANALYZED)
