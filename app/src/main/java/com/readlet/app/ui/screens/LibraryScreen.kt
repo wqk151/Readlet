@@ -142,7 +142,7 @@ fun LibraryScreen(vm: AppViewModel) {
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                 )
             }
-            // 一键分析：分享后进程常被系统杀掉导致分析没跑完，这里手动补分析所有待分析/失败卡。
+            // 一键分析：手动补分析所有待分析/失败卡（收藏不再自动分析）。
             val needAnalysis = items.count { it.card.status != CardStatus.ANALYZED }
             if (needAnalysis > 0) {
                 Box(
@@ -175,7 +175,7 @@ fun LibraryScreen(vm: AppViewModel) {
         when {
             items.isEmpty() -> EmptyHint(
                 "还没有拾到句子",
-                "阅读时选中喜欢的句子 → 分享 → 选择「拾句」，\n即可收藏并自动分析成可复习的卡片。",
+                "阅读时选中喜欢的句子 → 分享 → 选择「拾句」，\n即可收藏，点「一键分析」或详情页「开始分析」生成可复习的卡片。",
             )
             filtered.isEmpty() -> EmptyHint("没有符合条件的卡片", "换个关键词或筛选条件试试。")
             else -> Box(Modifier.fillMaxSize()) {

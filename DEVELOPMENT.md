@@ -67,7 +67,7 @@ app/src/main/
 
 ### 4.1 分享接收
 - `MainActivity`：`launchMode=singleTask`，intent-filter 含 `ACTION_SEND`(text/plain) + `ACTION_PROCESS_TEXT`
-- `onNewIntent`：读 `EXTRA_TEXT` / `EXTRA_PROCESS_TEXT` → 仓库入库 → 协程异步分析
+- `onNewIntent`：读 `EXTRA_TEXT` / `EXTRA_PROCESS_TEXT` → 仓库入库（仅置待分析，不自动分析）
 - 来源：`getCallingPackage` 的 label（失败降级"系统分享"）
 
 ### 4.2 分析编排（CardRepository.analyzeCardInner）
@@ -81,7 +81,7 @@ insertCard(text, source) → status=ANALYZING
          → LLM 缺 pos 时从释义前缀拆出（Keywords.splitPos，如 canyon → n.）
       b. 句子分词 → 词级表查缺补漏（仅限有级别词，跳过已在 a 中的词）→ 追加 CardWord，
          上限 5 个；词表释义词性前缀拆入 pos（词性只在单词后显示）
-失败分类: 网络/超时 → PENDING（下次打开自动补）
+失败分类: 网络/超时 → PENDING（一键分析手动补）
          解析失败  → FAILED（详情页可手动重试）
 ```
 - prompt 约束（assets/analyze_prompt.txt）：keywords 每条必须含 phonetic（英式 IPA）、pos（标准缩写，动词变形标「v. (过去式/现在分词/第三人称单数)」，短语标「n. phrase / phr. v.」）、meaning_in_context（纯中文，不得以词性缩写开头）——保证卡片内字段位置统一。

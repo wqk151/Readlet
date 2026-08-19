@@ -194,10 +194,12 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                 }
             } else {
                 Text(
-                    if (c.status == CardStatus.FAILED)
-                        "分析失败：可点击下方重新分析（请检查 API Key 设置与网络）"
-                    else
-                        "正在分析中，联网后自动完成。",
+                    when {
+                        c.status == CardStatus.FAILED ->
+                            "分析失败：可点击下方重新分析（请检查 API Key 设置与网络）"
+                        c.status == CardStatus.ANALYZING -> "正在分析中，请稍候…"
+                        else -> "待分析：点下方「开始分析」，或回卡片库用「一键分析」。"
+                    },
                     fontSize = 13.sp,
                     color = Muted,
                     modifier = Modifier.padding(top = 8.dp),
@@ -215,7 +217,11 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                         c.status == CardStatus.FAILED || c.status == CardStatus.PENDING ->
                             // 分析中禁用按钮，防重复点击
                             ActionButton(
-                                if (analyzing) "分析中…" else "重新分析",
+                                when {
+                                    analyzing -> "分析中…"
+                                    c.status == CardStatus.PENDING -> "开始分析"
+                                    else -> "重新分析"
+                                },
                                 Blue,
                                 enabled = !analyzing,
                             ) { vm.reanalyze(c.id) }

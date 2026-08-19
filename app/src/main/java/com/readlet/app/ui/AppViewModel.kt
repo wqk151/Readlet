@@ -194,27 +194,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (t == Tab.Review) refreshDue()
     }
 
-    /** 分享接收入口（onCreate / onNewIntent）。相同句子去重，不重复分析。 */
+    /** 分享接收入口（onCreate / onNewIntent）：仅入库为待分析，由用户手动分析。相同句子去重。 */
     fun onShared(text: String, source: String) {
         viewModelScope.launch {
             val (_, added) = repo.acceptShared(text, source)
             analysisTick.value++
             statsTick.value++
-            showToast(if (added) "已收录，开始分析" else "该句子已在卡片库中")
+            showToast(if (added) "已收录，可手动分析" else "该句子已在卡片库中")
         }
     }
 
-    /** App 启动：补分析 + 词表缺口回填 + 刷新队列。 */
+    /** App 启动：词表缺口回填 + 刷新队列（不再自动补分析，分析全部手动触发）。 */
     fun onAppStart() {
         viewModelScope.launch {
-            repo.retryPending()
             repo.backfillWordGaps()
             analysisTick.value++
             refreshDue()
         }
     }
 
-    /** 一键分析：补分析所有 待分析/失败/卡死 的卡片（分享后进程被杀导致分析没跑完时用）。 */
+    /** 一键分析：手动补分析所有 待分析/失败/卡死 的卡片。 */
     fun analyzeAll() {
         viewModelScope.launch {
             val count = repo.pendingCount()

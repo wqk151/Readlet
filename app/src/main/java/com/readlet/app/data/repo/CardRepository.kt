@@ -61,8 +61,8 @@ class CardRepository(
     // ---------- 采集 ----------
 
     /**
-     * 分享进来：入库 + 异步分析。
-     * @return (卡片 id, 是否新建) — 相同文本已收录过则直接复用，不重复建卡/分析。
+     * 分享进来：仅入库为待分析，不自动分析；由用户手动（详情页「开始分析」/卡片库「一键分析」）触发。
+     * @return (卡片 id, 是否新建) — 相同文本已收录过则直接复用，不重复建卡。
      */
     suspend fun acceptShared(text: String, source: String): Pair<Long, Boolean> {
         val cleaned = cleanSharedText(text)
@@ -72,7 +72,6 @@ class CardRepository(
         val id = cardDao.insert(
             Card(text = cleaned, source = source.ifBlank { "系统分享" }, status = CardStatus.PENDING)
         )
-        analyzeCard(id)
         return id to true
     }
 
@@ -94,7 +93,7 @@ class CardRepository(
         return cardDao.allIdTexts().firstOrNull { (_, t) -> flatten(t).equals(flat, ignoreCase = true) }?.id
     }
 
-    /** 启动时补分析所有 待分析/失败 的卡片。 */
+    /** 补分析所有 待分析/失败 的卡片（「一键分析」入口）。 */
     suspend fun retryPending() {
         cardDao.pendingCards().forEach { analyzeCard(it.id) }
     }
@@ -154,7 +153,7 @@ class CardRepository(
 
     /**
      * 容错链：ANALYZING → (LLM 重试 1 次) → 解析校验 → 事务写库；
-     * 网络类失败 → PENDING（等 retryPending）；解析/服务端类失败 → FAILED（可手动重试）。
+     * 网络类失败 → PENDING（可「一键分析」重试）；解析/服务端类失败 → FAILED（可手动重试）。
      * inFlight 拦截：同一张卡同时只会有一个分析任务。
      * @return 是否真正启动（false = 已有一个分析任务在跑）。
      */
