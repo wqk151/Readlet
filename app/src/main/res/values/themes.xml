@@ -6,4 +6,12 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <!-- 分享接收幽灵页：全透明 + 无转场动画 + 不生成起始窗口，用户完全看不到本窗口。 -->
+    <style name="Theme.Readlet.Transparent" parent="Theme.Readlet">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

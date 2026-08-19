@@ -1,14 +1,5 @@
 {
   "mcpServers": {
-    "code-review-graph": {
-      "command": "/home/wqk/mambaforge/envs/py10/bin/python3.10",
-      "args": [
-        "-m",
-        "code_review_graph",
-        "serve"
-      ],
-      "cwd": "/home/wqk/data/workspace/python/english-push",
-      "type": "stdio"
-    }
+    
   }
 }

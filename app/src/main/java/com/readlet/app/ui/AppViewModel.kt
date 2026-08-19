@@ -2,6 +2,7 @@ package com.readlet.app.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import com.readlet.app.ShareFeedback
 import androidx.lifecycle.viewModelScope
 import com.readlet.app.ReadletApp
 import com.readlet.app.data.Settings
@@ -194,13 +195,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (t == Tab.Review) refreshDue()
     }
 
-    /** 分享接收入口（onCreate / onNewIntent）：仅入库为待分析，由用户手动分析。相同句子去重。 */
-    fun onShared(text: String, source: String) {
+    /**
+     * 分享接收入口（onCreate / onNewIntent）：仅入库为待分析，由用户手动分析。相同句子去重。
+     * 外部分享后 app 立即退回后台，Compose snackbar 不可见 → 用系统 Toast 悬浮于来源 app 之上提示，
+     * 让用户知道已成功、无需反复点分享。onDone 在入库完成后回调（幽灵接收页用它 finish 自身）。
+     */
+    fun onShared(text: String, source: String, onDone: () -> Unit = {}) {
         viewModelScope.launch {
-            val (_, added) = repo.acceptShared(text, source)
-            analysisTick.value++
-            statsTick.value++
-            showToast(if (added) "已收录，可手动分析" else "该句子已在卡片库中")
+            try {
+                val (_, added) = repo.acceptShared(text, source)
+                analysisTick.value++
+                statsTick.value++
+                ShareFeedback.notify(getApplication(), added)
+            } finally {
+                onDone()
+            }
         }
     }
 
