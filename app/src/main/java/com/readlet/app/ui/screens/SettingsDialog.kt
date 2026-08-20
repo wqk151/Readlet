@@ -1,6 +1,10 @@
 package com.readlet.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +19,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -25,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,6 +48,14 @@ fun SettingsDialog(vm: AppViewModel) {
     var model by remember { mutableStateOf(state.model) }
     var glossary by remember { mutableStateOf(state.glossary) }
     var modelMenuOpen by remember { mutableStateOf(false) }
+
+    // 备份：SAF 选位置/选文件，导出 zip = 全部卡片 + 词表 + 复习记录 + 设置。
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri -> uri?.let { vm.exportBackup(it) } }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { vm.importBackup(it) } }
 
     AlertDialog(
         onDismissRequest = { vm.settingsOpen.value = false },
@@ -130,6 +144,28 @@ fun SettingsDialog(vm: AppViewModel) {
                 )
                 Text(
                     "翻译时遇到术语表里的词，引擎必须按指定译法翻译（全局生效）",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "数据备份",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { exportLauncher.launch("readlet-backup.zip") }) {
+                        Text("导出备份")
+                    }
+                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*")) }) {
+                        Text("导入备份")
+                    }
+                }
+                Text(
+                    "备份 = 全部卡片、词表、复习记录与设置。换手机或换签名前先导出，新环境装好后导入。",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),

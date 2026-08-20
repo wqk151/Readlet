@@ -1,6 +1,10 @@
 package com.readlet.app.data.repo
 
 import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
+import android.net.Uri
+import android.util.Xml
 import androidx.room.withTransaction
 import com.readlet.app.data.Settings
 import com.readlet.app.data.WordLevels
@@ -20,8 +24,17 @@ import com.readlet.app.llm.AnalyzeResult
 import com.readlet.app.llm.LlmClient
 import com.readlet.app.llm.LlmException
 import com.readlet.app.ui.Keywords
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.xmlpull.v1.XmlPullParser
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.time.LocalDate
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /** 句中分词（字母+撇号），级别词补缺用。 */
 private val TOKEN = Regex("[A-Za-z']+")
@@ -318,6 +331,203 @@ class CardRepository(
         return arr.toString()
     }
 
+    // ---------- 备份 ----------
+
+    /**
+     * 导出备份（zip：readlet.db + readlet.xml 设置）。
+     * 先 WAL checkpoint 把未落盘数据折进主库，保证拷出的 readlet.db 是完整快照。
+     */
+    suspend fun exportBackup(uri: Uri) = withContext(Dispatchers.IO) {
+        db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
+        val dbFile = context.getDatabasePath("readlet.db")
+        val prefsFile = File(context.dataDir, "shared_prefs/readlet.xml")
+        context.contentResolver.openOutputStream(uri)?.use { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("readlet.db"))
+                dbFile.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("readlet.xml"))
+                prefsFile.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+    }
+
+    /**
+     * 导入备份：解压 → 只读打开备份库（按列名读取，兼容旧版本缺列）→ 事务内整体替换 4 张表 → 恢复设置。
+     * 行级还原而非文件覆盖：不关库、不重建实例，Room 观察流自动跟随新数据；失败整体回滚。
+     */
+    suspend fun importBackup(uri: Uri) = withContext(Dispatchers.IO) {
+        val tmpDir = File(context.cacheDir, "import").apply { deleteRecursively(); mkdirs() }
+        try {
+            val tmpDb = File(tmpDir, "readlet.db")
+            val tmpPrefs = File(tmpDir, "readlet.xml")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                ZipInputStream(input).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        when (entry.name) {
+                            "readlet.db" -> zip.copyTo(FileOutputStream(tmpDb))
+                            "readlet.xml" -> zip.copyTo(FileOutputStream(tmpPrefs))
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                }
+            }
+            if (!tmpDb.isFile || tmpDb.length() == 0L) {
+                throw IllegalStateException("备份文件中没有 readlet.db")
+            }
+            val cards = readBackupCards(tmpDb)
+            val words = readBackupWords(tmpDb)
+            val logs = readBackupLogs(tmpDb)
+            val usages = readBackupUsages(tmpDb)
+            db.withTransaction {
+                cardDao.deleteAll()
+                wordDao.deleteAll()
+                logDao.deleteAll()
+                llmDao.deleteAll()
+                if (cards.isNotEmpty()) cardDao.insertAll(cards)
+                if (words.isNotEmpty()) wordDao.insertAll(words)
+                if (logs.isNotEmpty()) logDao.insertAll(logs)
+                if (usages.isNotEmpty()) llmDao.insertAll(usages)
+            }
+            if (tmpPrefs.isFile) restorePrefs(tmpPrefs)
+        } finally {
+            tmpDir.deleteRecursively()
+        }
+    }
+
+    private fun openBackup(file: File): SQLiteDatabase =
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
+
+    /** 备份库只读使用：SQLiteDatabase 不实现 Closeable，用显式 try/finally。 */
+    private fun <T> withBackup(file: File, block: (SQLiteDatabase) -> T): T {
+        val db = openBackup(file)
+        try {
+            return block(db)
+        } finally {
+            db.close()
+        }
+    }
+
+    /** 旧版本备份缺列时返回 null（当前列名读取，向后兼容）。 */
+    private fun Cursor.stringOrNull(col: String): String? =
+        getColumnIndex(col).takeIf { it >= 0 }?.let { if (isNull(it)) null else getString(it) }
+
+    private fun Cursor.longOrNull(col: String): Long? =
+        getColumnIndex(col).takeIf { it >= 0 }?.let { if (isNull(it)) null else getLong(it) }
+
+    private fun readBackupCards(file: File): List<Card> = withBackup(file) { src ->
+        src.rawQuery("SELECT * FROM cards", null).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        Card(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            text = c.getString(c.getColumnIndexOrThrow("text")),
+                            source = c.getString(c.getColumnIndexOrThrow("source")),
+                            status = c.getInt(c.getColumnIndexOrThrow("status")),
+                            translation = c.stringOrNull("translation"),
+                            pointsJson = c.stringOrNull("pointsJson"),
+                            grammarJson = c.stringOrNull("grammarJson"),
+                            collocationsJson = c.stringOrNull("collocationsJson"),
+                            createdAt = c.getLong(c.getColumnIndexOrThrow("createdAt")),
+                            analyzedAt = c.longOrNull("analyzedAt"),
+                            ef = c.getDouble(c.getColumnIndexOrThrow("ef")),
+                            interval = c.getInt(c.getColumnIndexOrThrow("interval")),
+                            reps = c.getInt(c.getColumnIndexOrThrow("reps")),
+                            lapses = c.getInt(c.getColumnIndexOrThrow("lapses")),
+                            dueAt = c.longOrNull("dueAt"),
+                            mastered = c.getInt(c.getColumnIndexOrThrow("mastered")) != 0,
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun readBackupWords(file: File): List<CardWord> = withBackup(file) { src ->
+        src.rawQuery("SELECT * FROM card_words", null).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        CardWord(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            cardId = c.getLong(c.getColumnIndexOrThrow("cardId")),
+                            word = c.getString(c.getColumnIndexOrThrow("word")),
+                            phonetic = c.stringOrNull("phonetic"),
+                            phoneticUs = c.stringOrNull("phoneticUs"),
+                            pos = c.stringOrNull("pos"),
+                            meaningInContext = c.stringOrNull("meaningInContext"),
+                            orderIdx = c.getInt(c.getColumnIndexOrThrow("orderIdx")),
+                            level = c.stringOrNull("level"),
+                            lemma = c.stringOrNull("lemma"),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun readBackupLogs(file: File): List<ReviewLog> = withBackup(file) { src ->
+        src.rawQuery("SELECT * FROM review_logs", null).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        ReviewLog(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            cardId = c.getLong(c.getColumnIndexOrThrow("cardId")),
+                            grade = c.getInt(c.getColumnIndexOrThrow("grade")),
+                            type = c.getInt(c.getColumnIndexOrThrow("type")),
+                            reviewedAt = c.getLong(c.getColumnIndexOrThrow("reviewedAt")),
+                            reviewedDay = c.getLong(c.getColumnIndexOrThrow("reviewedDay")),
+                            intervalAfter = c.getInt(c.getColumnIndexOrThrow("intervalAfter")),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun readBackupUsages(file: File): List<LlmUsage> = withBackup(file) { src ->
+        src.rawQuery("SELECT * FROM llm_usage", null).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        LlmUsage(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            calledAt = c.getLong(c.getColumnIndexOrThrow("calledAt")),
+                            promptTokens = c.getInt(c.getColumnIndexOrThrow("promptTokens")),
+                            completionTokens = c.getInt(c.getColumnIndexOrThrow("completionTokens")),
+                            totalTokens = c.getInt(c.getColumnIndexOrThrow("totalTokens")),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /** 恢复设置（readlet.xml）：清空后按备份键值回填（当前设置全是字符串键值）。 */
+    private fun restorePrefs(file: File) {
+        val parser = Xml.newPullParser()
+        parser.setInput(FileInputStream(file), "UTF-8")
+        val entries = mutableListOf<Pair<String, String>>()
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG && parser.name == "string") {
+                parser.getAttributeValue(null, "name")?.let { name ->
+                    entries += name to parser.nextText()
+                }
+            }
+            event = parser.next()
+        }
+        if (entries.isEmpty()) return
+        val editor = context.getSharedPreferences("readlet", Context.MODE_PRIVATE).edit().clear()
+        entries.forEach { (k, v) -> editor.putString(k, v) }
+        editor.apply()
+    }
+
     // ---------- 复习 ----------
 
     /** 每日队列 = 到期卡片（dueAt≤今天）；只含点过「开始学习」的卡，待学习卡不进队列。 */
@@ -352,6 +562,9 @@ class CardRepository(
             )
         )
     }
+
+    /** 下一张待学习卡（连播）：加入复习后直接切到它；null = 待学习已全部学完。 */
+    suspend fun nextUnlearned(excludeId: Long): Card? = cardDao.nextUnlearned(excludeId)
 
     /** 开始学习（方案 A）：待学习卡进入复习排程，次日到期。 */
     suspend fun learnCard(cardId: Long) {

@@ -52,21 +52,28 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
     val card by cardFlow.collectAsStateWithLifecycle(initialValue = null)
     // 防重复点击：该卡手动重新分析中时禁用按钮。
     val analyzing = vm.detailAnalyzing.collectAsStateWithLifecycle().value.contains(cardId)
-    var words by remember { mutableStateOf<List<CardWord>>(emptyList()) }
+    // key 绑定 cardId：连播切卡（A→B）时立即重置，避免残留上一张卡的词表。
+    var words by remember(cardId) { mutableStateOf<List<CardWord>>(emptyList()) }
 
     // 进入即加载词表；分析完成后（含重新分析）重新加载。
-    LaunchedEffect(card?.status) {
+    // key 必须带 cardId：连播切卡时 A、B 同为 ANALYZED，仅依赖 status 值不会重启，
+    // words 停留在上一张卡的词表（语句已换、重点词/要点还是旧的）。
+    LaunchedEffect(cardId, card?.status) {
         if (card?.status == CardStatus.ANALYZED) {
             words = vm.loadWords(cardId)
         }
     }
+
+    // 连播切卡（加入复习 → 下一张待学习卡）时回到顶部，新卡从头读起。
+    val scrollState = rememberScrollState()
+    LaunchedEffect(cardId) { scrollState.scrollTo(0) }
 
     val c = card
     Column(
         Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(

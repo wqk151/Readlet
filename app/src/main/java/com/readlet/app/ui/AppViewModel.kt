@@ -1,6 +1,7 @@
 package com.readlet.app.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import com.readlet.app.ShareFeedback
 import androidx.lifecycle.viewModelScope
@@ -317,12 +318,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 开始学习：待学习卡进入复习排程（次日到期），卡片库角标即时更新。 */
+    /** 开始学习：待学习卡进入复习排程（次日到期），卡片库角标即时更新。
+     * 卡片库「待学习」流程自动连播：加入复习后直接切到下一张待学习卡，全部学完才关闭详情。
+     * （词频加练/复习页里打开的详情不连播，保持原行为返回原处。） */
     fun learnCard(cardId: Long) {
         viewModelScope.launch {
             repo.learnCard(cardId)
             analysisTick.value++
-            showToast("已加入复习，明天起进入复习排程")
+            if (tab.value == Tab.Library) {
+                val next = repo.nextUnlearned(cardId)
+                if (next != null) {
+                    detailCardId.value = next.id
+                } else {
+                    closeDetail()
+                    showToast("已加入复习，明天起进入复习排程；待学习卡片已全部学完 🎉")
+                }
+            } else {
+                showToast("已加入复习，明天起进入复习排程")
+            }
         }
     }
 
@@ -356,6 +369,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _settingsState.value = SettingsState(settings.apiKey, settings.baseUrl, settings.model, settings.glossary)
         settingsOpen.value = false
         showToast("设置已保存")
+    }
+
+    /** 导出备份：全部卡片/词表/复习记录 + 设置 → 用户选择的 zip。 */
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                repo.exportBackup(uri)
+                showToast("备份已导出")
+            } catch (e: Exception) {
+                showToast("导出失败：${e.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    /** 导入备份：整体替换全部数据与设置，成功后刷新所有页面状态。 */
+    fun importBackup(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                repo.importBackup(uri)
+                repo.refreshClient()
+                _settingsState.value = SettingsState(settings.apiKey, settings.baseUrl, settings.model, settings.glossary)
+                analysisTick.value++
+                statsTick.value++
+                refreshDue()
+                settingsOpen.value = false
+                showToast("备份导入成功")
+            } catch (e: Exception) {
+                showToast("导入失败：${e.message ?: "未知错误"}")
+            }
+        }
     }
 
     fun showToast(msg: String) {

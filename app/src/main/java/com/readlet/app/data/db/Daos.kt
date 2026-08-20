@@ -13,6 +13,14 @@ interface CardDao {
     @Insert
     suspend fun insert(card: Card): Long
 
+    /** 导入备份：批量插入（保留原 id，外键引用不失效）。 */
+    @Insert
+    suspend fun insertAll(cards: List<Card>)
+
+    /** 导入备份：整体替换前清空。 */
+    @Query("DELETE FROM cards")
+    suspend fun deleteAll()
+
     @Update
     suspend fun update(card: Card)
 
@@ -44,6 +52,14 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE status IN (0, 1, 3) ORDER BY createdAt DESC")
     suspend fun pendingCards(): List<Card>
 
+    // 下一张待学习卡（已分析、未点「开始学习」、未掌握）：学习流程「加入复习 → 自动切下一张」用，
+    // 按收藏时间倒序与卡片库一致；excludeId 排除刚学完的卡（防御，连播中不该再出现）。
+    @Query(
+        "SELECT * FROM cards WHERE status = 2 AND mastered = 0 AND dueAt IS NULL " +
+            "AND id != :excludeId ORDER BY createdAt DESC, id DESC LIMIT 1"
+    )
+    suspend fun nextUnlearned(excludeId: Long): Card?
+
     // 复习队列只含已点「开始学习」的卡片（dueAt 已排程，≤今天到期）；
     // 待学习（dueAt=null）/ 待分析 / 已掌握 一律不进队列。
     @Query(
@@ -69,6 +85,10 @@ data class CardIdText(val id: Long, val text: String)
 interface CardWordDao {
     @Insert
     suspend fun insertAll(words: List<CardWord>)
+
+    /** 导入备份：整体替换前清空。 */
+    @Query("DELETE FROM card_words")
+    suspend fun deleteAll()
 
     /** 重新分析前清空该卡的旧词标注（防止重分析累积重复词）。 */
     @Query("DELETE FROM card_words WHERE cardId = :cardId")
@@ -107,6 +127,14 @@ interface ReviewLogDao {
     @Insert
     suspend fun insert(log: ReviewLog)
 
+    /** 导入备份：批量插入（保留原 id，外键引用不失效）。 */
+    @Insert
+    suspend fun insertAll(logs: List<ReviewLog>)
+
+    /** 导入备份：整体替换前清空。 */
+    @Query("DELETE FROM review_logs")
+    suspend fun deleteAll()
+
     @Query("SELECT reviewedDay, COUNT(*) AS cnt FROM review_logs GROUP BY reviewedDay")
     fun observeDailyCounts(): Flow<List<DailyCount>>
 
@@ -123,6 +151,14 @@ data class DailyCount(val reviewedDay: Long, val cnt: Int)
 interface LlmUsageDao {
     @Insert
     suspend fun insert(usage: LlmUsage)
+
+    /** 导入备份：批量插入（保留原 id）。 */
+    @Insert
+    suspend fun insertAll(usages: List<LlmUsage>)
+
+    /** 导入备份：整体替换前清空。 */
+    @Query("DELETE FROM llm_usage")
+    suspend fun deleteAll()
 
     /** 累计调用次数（成功调用）。 */
     @Query("SELECT COUNT(*) FROM llm_usage")
