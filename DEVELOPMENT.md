@@ -28,6 +28,7 @@ Gradle: 使用 wrapper（8.9）
 - 构建命令：`./gradlew assembleDebug`（产物 `app/build/outputs/apk/debug/Readlet-v<versionName>-debug.apk`）
 - APK 命名规范：`Readlet-v<versionName>-<variant>.apk`，版本号单一来源 `app/build.gradle.kts` 的 `appVersionName`（发版时同时 bump `versionCode`）
 - 安装：`./gradlew installDebug`（需 adb 设备）
+- **发布流程（规范）**：任何新增需求、优化、bug 修复完成后 → bump `appVersionName`（功能 minor / 修复 patch）+ `versionCode` +1 → `./gradlew assembleRelease`（自动走 `keystore.properties` 的 `readlet-release.keystore` 签名）→ `adb install -r app/build/outputs/apk/release/Readlet-v<versionName>-release.apk`（同签名覆盖，数据不丢；设备上已装 release 签名，勿用 debug 包覆盖）
 - 调试：真机 adb（vivo V2217A）；数据库拉取 `adb shell run-as com.readlet.app cat databases/readlet.db`
 
 ## 3. 项目结构
