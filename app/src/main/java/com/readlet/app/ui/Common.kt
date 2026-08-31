@@ -34,6 +34,7 @@ import com.readlet.app.ui.theme.Amber
 import com.readlet.app.ui.theme.Blue
 import com.readlet.app.ui.theme.Green
 import com.readlet.app.ui.theme.HighlightOrange
+import com.readlet.app.ui.theme.LightBlue
 import com.readlet.app.ui.theme.Muted
 import com.readlet.app.ui.theme.Red
 import com.readlet.app.ui.theme.SentenceLarge
@@ -175,7 +176,7 @@ fun MetaLine(content: String) {
     )
 }
 
-/** 重点词元信息行：英/美音标 · 原型 · 级别，全部中点号隔开（级别与音标同行）；缺项不显示。 */
+/** 重点词元信息行：英/美音标 · 原型 · 级别 · 构词，全部中点号隔开；缺项不显示。 */
 @Composable
 fun KeywordMetaLine(
     word: String,
@@ -183,23 +184,57 @@ fun KeywordMetaLine(
     phoneticUs: String?,
     level: String?,
     lemma: String?,
+    affix: String? = null,
 ) {
     // 与词形相同的原型没有展示价值（harbor → 原型 harbor），隐藏；blank 同样隐藏。
     val lemmaShown = lemma?.takeIf { it.isNotBlank() && !it.equals(word, ignoreCase = true) }
-    val parts = listOfNotNull(
+    // 元信息行：音标 · 原型 · 级别（灰）；构词单独一行（淡蓝，记忆辅助更醒目）。
+    val meta = listOfNotNull(
         phonetic?.takeIf { it.isNotBlank() }?.let { "英 $it" },
         phoneticUs?.takeIf { it.isNotBlank() }?.let { "美 $it" },
         lemmaShown?.let { "原型 $it" },
         Keywords.levelLabel(level),
     )
-    if (parts.isNotEmpty()) {
+    if (meta.isNotEmpty()) {
         Text(
-            parts.joinToString(" · "),
+            meta.joinToString(" · "),
             fontSize = 12.sp,
             color = Muted,
             modifier = Modifier.padding(top = 1.dp),
         )
     }
+    affixDisplay(affix)?.let { affixText ->
+        Text(
+            "构词 $affixText",
+            fontSize = 12.sp,
+            color = LightBlue,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * 词根词缀渲染：构件数组 JSON（[part,type,meaning] 三元组）→ "sneak（词根：偷偷走）＋ -ing（后缀：进行中）"；
+ * 旧版整串文本原样回退；解析失败/为空返回 null（不显示）。
+ */
+private fun affixDisplay(affixJson: String?): String? {
+    if (affixJson.isNullOrBlank()) return null
+    val arr = try {
+        org.json.JSONArray(affixJson)
+    } catch (_: Exception) {
+        return affixJson
+    }
+    if (arr.length() == 0) return null
+    return buildList {
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONArray(i) ?: continue
+            val part = item.optString(0).takeIf { it.isNotBlank() } ?: continue
+            val type = item.optString(1).takeIf { it.isNotBlank() }
+            val meaning = item.optString(2).takeIf { it.isNotBlank() }
+            val inner = listOfNotNull(type, meaning).joinToString("：")
+            add(if (inner.isEmpty()) part else "$part（$inner）")
+        }
+    }.takeIf { it.isNotEmpty() }?.joinToString("＋")
 }
 
 /** 白色圆角卡片容器。内容自上而下排列（Column）。 */

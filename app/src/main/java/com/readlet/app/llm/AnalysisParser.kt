@@ -25,6 +25,7 @@ object AnalysisParser {
                     pos = it.optStringOrNull("pos"),
                     level = it.optStringOrNull("level"),
                     lemma = it.optStringOrNull("lemma"),
+                    affix = parseAffix(it.opt("affix")),
                     meaningInContext = it.optStringOrNull("meaning_in_context"),
                 )
             },
@@ -96,6 +97,34 @@ object AnalysisParser {
                     // 跳过单个坏条目，不整卡失败
                 }
             }
+        }
+    }
+    /**
+     * 解析 affix：v7 起为构件数组 [{part,type,meaning}]（兼容字符串项），
+     * 旧版整串文本（如 "loom（词根）+ -ed（后缀）"）包成单个构件原样保留；缺失返回 null。
+     */
+    private fun parseAffix(raw: Any?): List<AnalyzeResult.AffixPart>? {
+        if (raw == null || raw == JSONObject.NULL) return null
+        return when (raw) {
+            is JSONArray -> buildList {
+                for (i in 0 until raw.length()) {
+                    when (val item = raw.opt(i)) {
+                        is JSONObject -> {
+                            val part = item.optStringOrNull("part") ?: continue
+                            add(
+                                AnalyzeResult.AffixPart(
+                                    part,
+                                    item.optStringOrNull("type"),
+                                    item.optStringOrNull("meaning"),
+                                )
+                            )
+                        }
+                        is String -> if (item.isNotBlank()) add(AnalyzeResult.AffixPart(item))
+                    }
+                }
+            }.takeIf { it.isNotEmpty() }
+            is String -> if (raw.isBlank()) null else listOf(AnalyzeResult.AffixPart(raw))
+            else -> null
         }
     }
 

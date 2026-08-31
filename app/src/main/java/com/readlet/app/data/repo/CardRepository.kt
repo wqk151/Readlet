@@ -10,6 +10,7 @@ import com.readlet.app.data.Settings
 import com.readlet.app.data.WordLevels
 import com.readlet.app.data.db.AppDatabase
 import com.readlet.app.data.db.Card
+import com.readlet.app.data.db.CardReviewCount
 import com.readlet.app.data.db.CardStatus
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.data.db.DailyCount
@@ -25,6 +26,9 @@ import com.readlet.app.llm.LlmClient
 import com.readlet.app.llm.LlmException
 import com.readlet.app.ui.Keywords
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
@@ -33,11 +37,16 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.time.LocalDate
 import java.util.zip.ZipEntry
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /** 句中分词（字母+撇号），级别词补缺用。 */
 private val TOKEN = Regex("[A-Za-z']+")
+
+/** 「一键分析」并发上限。 */
+private const val ANALYZE_CONCURRENCY = 5
 
 /**
  * 核心业务编排：采集 → 分析（LLM+容错链）→ 复习（SM-2）→ 统计。
@@ -57,8 +66,8 @@ class CardRepository(
     var llmClient: LlmClient = buildClient()
         private set
 
-    /** 分析中的卡片 id 集合：防止并发/重复分析同一张卡（跨协程竞态）。 */
-    private val inFlight = mutableSetOf<Long>()
+    /** 分析中的卡片 id 集合：防止并发/重复分析同一张卡（跨协程竞态）。并发化后跨线程访问，需线程安全集合。 */
+    private val inFlight = ConcurrentHashMap.newKeySet<Long>()
 
     private fun buildClient() = LlmClient(
         baseUrl = settings.baseUrl,
@@ -107,15 +116,20 @@ class CardRepository(
     }
 
     /**
-     * 补分析所有 待分析/失败/卡死 的卡片（「一键分析」入口）：按顺序逐个分析，
+     * 补分析所有 待分析/失败/卡死 的卡片（「一键分析」入口）：并发 ANALYZE_CONCURRENCY 张，
      * 每完成一张回调进度（跳过 inFlight 已拦截的卡也计为处理过）。
      */
     suspend fun analyzePending(onProgress: (Int) -> Unit = {}) {
-        var done = 0
-        cardDao.pendingCards().forEach { card ->
-            analyzeCard(card.id)
-            done++
-            onProgress(done)
+        val done = AtomicInteger(0)
+        coroutineScope {
+            cardDao.pendingCards().chunked(ANALYZE_CONCURRENCY).forEach { batch ->
+                batch.map { card ->
+                    async {
+                        analyzeCard(card.id)
+                        onProgress(done.incrementAndGet())
+                    }
+                }.awaitAll()
+            }
         }
     }
 
@@ -254,9 +268,10 @@ class CardRepository(
             for (part in Keywords.splitKeyword(k.word)) {
                 if (!seen.add(part.lowercase())) continue
                 val entry = wordLevels.lookup(part)
-                // 过滤简单词：词表确认的四级基础词（fog/racket/wake 这类）不作为重点词；
-                // 词表未收录的词保留（多为词组/语境表达，无法判定难度，删了卡片就没词可学）。
-                if (entry != null && entry.base) continue
+                // 难度判断交给 LLM（prompt 含学习者水平基线：超纲必挑、四级词语境用法值得学仍挑），
+                // 词表四级标志不再剔除 LLM 关键词：3761 个四级基础词全部带考试级别（resign=雅思 等），
+                // 一刀切按 base 剔除会误伤超纲词（曾导致 resign 类漏词）。词表未收录的词保留。
+                if (entry != null && entry.base && entry.level.isEmpty()) continue
                 val rawMeaning = k.meaningInContext?.takeIf { it.isNotBlank() }
                     ?: entry?.meaning?.takeIf { it.isNotBlank() }
                 // LLM 偶发不返回词性：词表释义带词性前缀时拆出补位（如 canyon → n.），保证词性位置一致。
@@ -283,6 +298,7 @@ class CardRepository(
                             ?: entry?.level?.takeIf { it.isNotEmpty() },
                         lemma = k.lemma?.takeIf { it.isNotBlank() }
                             ?: wordLevels.lemma(part),
+                        affix = encode(k.affix?.map { listOf(it.part, it.type.orEmpty(), it.meaning.orEmpty()) }.orEmpty()),
                     )
                 )
             }
@@ -463,6 +479,7 @@ class CardRepository(
                             orderIdx = c.getInt(c.getColumnIndexOrThrow("orderIdx")),
                             level = c.stringOrNull("level"),
                             lemma = c.stringOrNull("lemma"),
+                            affix = c.stringOrNull("affix"),
                         )
                     )
                 }
@@ -611,6 +628,7 @@ class CardRepository(
 
     fun observeCards(): kotlinx.coroutines.flow.Flow<List<Card>> = cardDao.observeAll()
     fun observeCard(id: Long): kotlinx.coroutines.flow.Flow<Card?> = cardDao.observeById(id)
+    fun observeReviewCounts(): kotlinx.coroutines.flow.Flow<List<CardReviewCount>> = logDao.observeReviewCounts()
     fun observeDailyCounts(): kotlinx.coroutines.flow.Flow<List<DailyCount>> = logDao.observeDailyCounts()
     fun observeTotalCount(): kotlinx.coroutines.flow.Flow<Int> = cardDao.observeTotalCount()
     fun observeAnalyzedCount(): kotlinx.coroutines.flow.Flow<Int> = cardDao.observeAnalyzedCount()

@@ -140,12 +140,17 @@ interface ReviewLogDao {
 
     @Query("SELECT COUNT(*) FROM review_logs WHERE type = :type")
     fun observeCountByType(type: Int): Flow<Int>
+    /** 每卡排程复习次数（type=0）：卡片库/复习页「已复习 N 次」展示。 */
+    @Query("SELECT cardId, COUNT(*) AS cnt FROM review_logs WHERE type = 0 GROUP BY cardId")
+    fun observeReviewCounts(): Flow<List<CardReviewCount>>
 
     @Query("SELECT * FROM review_logs WHERE cardId = :cardId ORDER BY reviewedAt DESC LIMIT 1")
     suspend fun lastForCard(cardId: Long): ReviewLog?
 }
 
 data class DailyCount(val reviewedDay: Long, val cnt: Int)
+/** 每卡排程复习次数（type=0）映射。 */
+data class CardReviewCount(val cardId: Long, val cnt: Int)
 
 @Dao
 interface LlmUsageDao {

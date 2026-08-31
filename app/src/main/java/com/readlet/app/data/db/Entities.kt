@@ -69,6 +69,8 @@ data class CardWord(
     val level: String? = null,
     /** 原型（v6）：LLM 优先（loomed → loom），词表变形还原兜底；原形或词组为 null。 */
     val lemma: String? = null,
+    /** 词根词缀拆解（v7）：仅 LLM 重点词提供，辅助记忆；无法确定时为 null。 */
+    val affix: String? = null,
 )
 
 /** 复习日志：SRS 排程与统计（热力图/曲线/打卡）的数据源 */

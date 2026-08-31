@@ -147,6 +147,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val cardSeq: StateFlow<Map<Long, Int>> = _inboxItems
         .map { items -> items.mapIndexed { i, it -> it.card.id to i + 1 }.toMap() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    /** 每卡排程复习次数（type=0）：卡片库/复习页「已复习 N 次」数据源。 */
+    val reviewCounts: StateFlow<Map<Long, Int>> = repo.observeReviewCounts()
+        .map { list -> list.associate { it.cardId to it.cnt } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // ---------- 统计 ----------
     private val statsTick = MutableStateFlow(0)

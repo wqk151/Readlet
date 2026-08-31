@@ -157,4 +157,44 @@ class AnalysisParserTest {
         assertEquals("/wɒnd/", r.keywords[0].phoneticUk)
         assertEquals("/wɑːnd/", r.keywords[0].phoneticUs)
     }
+
+    // ---------- 词根词缀 ----------
+
+    @Test
+    fun `parses affix part array`() {
+        val raw = """
+            {"mode":"sentence","translation":"t",
+             "keywords":[{"word":"sneaking","affix":[{"part":"sneak","type":"词根","meaning":"偷偷走"},
+                                                       {"part":"-ing","type":"后缀","meaning":"进行中"}]}],
+             "points":[],"grammar":[],"collocations":[]}
+        """.trimIndent()
+        val affix = AnalysisParser.parse(raw).keywords[0].affix!!
+        assertEquals(2, affix.size)
+        assertEquals("sneak", affix[0].part)
+        assertEquals("词根", affix[0].type)
+        assertEquals("偷偷走", affix[0].meaning)
+        assertEquals("-ing", affix[1].part)
+        assertEquals("后缀", affix[1].type)
+        assertEquals("进行中", affix[1].meaning)
+    }
+
+    @Test
+    fun `legacy string affix becomes single part`() {
+        val raw = """
+            {"mode":"sentence","translation":"t",
+             "keywords":[{"word":"loomed","affix":"loom（词根）+ -ed（过去式后缀）"}],
+             "points":[],"grammar":[],"collocations":[]}
+        """.trimIndent()
+        val affix = AnalysisParser.parse(raw).keywords[0].affix!!
+        assertEquals(1, affix.size)
+        assertEquals("loom（词根）+ -ed（过去式后缀）", affix[0].part)
+        assertNull(affix[0].type)
+        assertNull(affix[0].meaning)
+    }
+
+    @Test
+    fun `missing affix stays null`() {
+        val raw = """{"mode":"sentence","translation":"t","keywords":[{"word":"x"}],"points":[],"grammar":[],"collocations":[]}"""
+        assertNull(AnalysisParser.parse(raw).keywords[0].affix)
+    }
 }

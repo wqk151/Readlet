@@ -16,8 +16,12 @@ data class AnalyzeResult(
         val pos: String?,
         val level: String?,           // 考试级别：六级/考研/雅思/专四/专八
         val lemma: String?,           // 原型（动词原形/名词单数）；原形或短语为 null
+        val affix: List<AffixPart>? = null,  // 词根词缀构件（仅单词；无法确定为 null）
         val meaningInContext: String?,
     )
+
+    /** 词根词缀构件：part=构件本身（sneak / -ing），type=词根/前缀/后缀，meaning=构件含义（记忆点）。 */
+    data class AffixPart(val part: String, val type: String? = null, val meaning: String? = null)
 
     data class Point(val expr: String, val meaning: String)
 

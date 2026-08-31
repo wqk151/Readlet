@@ -69,6 +69,9 @@ class LlmClient(
         val json = JSONObject()
             .put("model", model)
             .put("temperature", 0.3)
+            // DeepSeek v4 思考模式默认开启（high effort）：结构化 JSON 分析任务收益低、
+            // reasoning token 计费高、延迟翻倍，显式禁用（兼容端点一般忽略未知参数）。
+            .put("thinking", JSONObject().put("type", "disabled"))
             .put("messages", org.json.JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))
                 .put(JSONObject().put("role", "user").put("content", text))

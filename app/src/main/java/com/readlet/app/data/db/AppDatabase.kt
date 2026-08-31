@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Card::class, CardWord::class, ReviewLog::class, LlmUsage::class],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -71,10 +71,16 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE card_words ADD COLUMN lemma TEXT")
             }
         }
+        /** v6 → v7：card_words 新增 affix 列（重点词词根词缀拆解，LLM 提供；无法确定为空）。 */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE card_words ADD COLUMN affix TEXT")
+            }
+        }
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "readlet.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
     }
 }

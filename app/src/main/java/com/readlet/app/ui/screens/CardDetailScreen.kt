@@ -144,6 +144,7 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "â† è¿
                                     phoneticUs = w.phoneticUs,
                                     level = w.level,
                                     lemma = w.lemma ?: remember(w) { vm.lemmaOf(w.word) },
+                                    affix = w.affix,
                                 )
                                 meaning.takeIf { it.isNotBlank() }?.let { m ->
                                     Text(

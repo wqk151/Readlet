@@ -86,6 +86,7 @@ fun LibraryScreen(vm: AppViewModel) {
     val items by vm.inboxItems.collectAsStateWithLifecycle()
     val streak by vm.streak.collectAsStateWithLifecycle()
     val seqOf by vm.cardSeq.collectAsStateWithLifecycle()
+    val reviewCounts by vm.reviewCounts.collectAsStateWithLifecycle()
     val analyzing by vm.analyzing.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(LibFilter.ALL) }
@@ -186,9 +187,20 @@ fun LibraryScreen(vm: AppViewModel) {
             }
         }
         SearchField(query, onSearch = { focusManager.clearFocus() }) { query = it }
+        // 筛选计数：基于全量库（不受搜索词影响），>0 才显示在 chip 文字内。
+        val learnCount = items.count { matchFilter(it, LibFilter.TO_LEARN) }
+        val masteredCount = items.count { matchFilter(it, LibFilter.MASTERED) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LibFilter.entries.forEach { f ->
-                FilterChip(f.label, f == filter) { filter = f }
+                FilterChip(
+                    f.label,
+                    f == filter,
+                    count = when (f) {
+                        LibFilter.TO_LEARN -> learnCount
+                        LibFilter.MASTERED -> masteredCount
+                        else -> 0
+                    },
+                ) { filter = f }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -209,6 +221,7 @@ fun LibraryScreen(vm: AppViewModel) {
                         LibRow(
                             item,
                             seq = seqOf[item.card.id] ?: 0,
+                            reviewCount = reviewCounts[item.card.id] ?: 0,
                             query = q,
                             batchRunning = analyzing != null,
                             onClick = {
@@ -279,7 +292,7 @@ private fun SearchField(query: String, onSearch: () -> Unit, onChange: (String) 
 }
 
 @Composable
-private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FilterChip(label: String, selected: Boolean, count: Int = 0, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -291,7 +304,7 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
-            label,
+            "$label${if (count > 0) " $count" else ""}",
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = if (selected) MaterialTheme.colorScheme.onPrimary
@@ -305,6 +318,7 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun LibRow(
     item: InboxItem,
     seq: Int,
+    reviewCount: Int,
     query: String,
     batchRunning: Boolean,
     onClick: () -> Unit,
@@ -415,10 +429,9 @@ private fun LibRow(
         // 旧数据来源可能已带「分享: 」前缀（系统剪贴板标签），显示时去重。
         MetaLine("分享: ${item.card.source.removePrefix("分享:").removePrefix("分享：").trimStart()}")
         Spacer(Modifier.height(2.dp))
-        val learned = item.card.reps
         val state = when {
             item.card.mastered -> "已掌握"
-            learned > 0 -> "已学 $learned 次"
+            reviewCount > 0 -> "已复习 $reviewCount 次"
             else -> "未开始"
         }
         MetaLine("${item.card.createdAt.toDateTimeString()} · $state")

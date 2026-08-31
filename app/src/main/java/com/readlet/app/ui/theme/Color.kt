@@ -17,6 +17,8 @@ val GreenDark = Color(0xFF8FD4AC)
 val Amber = Color(0xFFB07D2B)
 val Red = Color(0xFFB0524A)
 val Blue = Color(0xFF3B6EA5)
+// 词根词缀（构词）文字：淡蓝，与灰色元信息行区分（详情页/复习页共用）
+val LightBlue = Color(0xFF7BA6CE)
 val Ink = Color(0xFF23262B)
 val Muted = Color(0xFF8A857C)
 val MutedDark = Color(0xFF9E9A90)

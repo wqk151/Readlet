@@ -64,6 +64,7 @@ fun ReviewScreen(vm: AppViewModel) {
     val session by vm.reviewSession.collectAsStateWithLifecycle()
     val words by vm.reviewWords.collectAsStateWithLifecycle()
     val seqOf by vm.cardSeq.collectAsStateWithLifecycle()
+    val reviewCounts by vm.reviewCounts.collectAsStateWithLifecycle()
     var flipped by remember { mutableStateOf(false) }
 
     val card = session.card
@@ -94,6 +95,7 @@ fun ReviewScreen(vm: AppViewModel) {
                 card = card,
                 words = words,
                 seq = seqOf[card.id] ?: 0,
+                reviewCount = reviewCounts[card.id] ?: 0,
                 flipped = flipped,
                 isPractice = session.isPractice,
                 lemmaOf = { vm.lemmaOf(it) },
@@ -159,6 +161,7 @@ private fun Flashcard(
     card: Card,
     words: List<CardWord>,
     seq: Int,
+    reviewCount: Int,
     flipped: Boolean,
     isPractice: Boolean,
     lemmaOf: (String) -> String?,
@@ -176,7 +179,7 @@ private fun Flashcard(
         // 全局序号：与卡片库同一编号，可互相对照。
         if (seq > 0) {
             Text(
-                "#$seq · 已学 ${card.reps} 次",
+                "#$seq · 已复习 $reviewCount 次",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = Muted,
@@ -233,6 +236,7 @@ private fun Flashcard(
                                     phoneticUs = w.phoneticUs,
                                     level = w.level,
                                     lemma = w.lemma ?: lemmaOf(w.word),
+                                    affix = w.affix,
                                 )
                                 meaning.takeIf { it.isNotBlank() }?.let { m ->
                                     Text(
