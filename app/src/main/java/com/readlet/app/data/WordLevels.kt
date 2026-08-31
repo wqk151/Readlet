@@ -53,6 +53,19 @@ class WordLevels internal constructor(
         }
         return null
     }
+    /**
+     * 是否「同形异义变形」：词表把 surface 单列为另一词义的独立词条（felt=专八名词「毡」），
+     * 而其原形是四级基础词（feel）。句中该形通常是原形的变形（felt=feel 的过去式），
+     * 此时词表 surface 释义/级别属于另一词义、不可信，调用方应跳过词表兜底。
+     * 无原形、或原形非四级基础词（crouched→crouch）返回 false。
+     */
+    fun homographOfBase(token: String): Boolean {
+        val w = token.trim().lowercase()
+        if (w.isEmpty()) return false
+        val lem = lemma(w) ?: return false
+        if (lem == w) return false
+        return lookup(lem)?.base == true
+    }
 
     /**
      * 音标查询：词形本身的音标为空时继续查变形原形（柯林斯缓存变形词条音标常为空，

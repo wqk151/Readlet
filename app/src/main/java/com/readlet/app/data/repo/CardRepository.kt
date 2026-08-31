@@ -271,9 +271,11 @@ class CardRepository(
                 // 难度判断交给 LLM（prompt 含学习者水平基线：超纲必挑、四级词语境用法值得学仍挑），
                 // 词表四级标志不再剔除 LLM 关键词：3761 个四级基础词全部带考试级别（resign=雅思 等），
                 // 一刀切按 base 剔除会误伤超纲词（曾导致 resign 类漏词）。词表未收录的词保留。
-                if (entry != null && entry.base && entry.level.isEmpty()) continue
+                // 同形异义变形（felt→feel）：词表把 felt 单列为专八名词「毡」，句中却是基础词 feel
+                // 的过去式——词表释义/级别属于另一词义，LLM 缺省时兜底只会带入错义，不兜底。
+                val homograph = entry != null && wordLevels.homographOfBase(part)
                 val rawMeaning = k.meaningInContext?.takeIf { it.isNotBlank() }
-                    ?: entry?.meaning?.takeIf { it.isNotBlank() }
+                    ?: entry?.takeUnless { homograph }?.meaning?.takeIf { it.isNotBlank() }
                 // LLM 偶发不返回词性：词表释义带词性前缀时拆出补位（如 canyon → n.），保证词性位置一致。
                 val (posFromMeaning, meaning) = if (k.pos.isNullOrBlank()) {
                     Keywords.splitPos(rawMeaning ?: "")
@@ -295,7 +297,7 @@ class CardRepository(
                         meaningInContext = meaning,
                         orderIdx = idx++,
                         level = k.level?.takeIf { it.isNotBlank() }
-                            ?: entry?.level?.takeIf { it.isNotEmpty() },
+                            ?: entry?.takeUnless { homograph }?.level?.takeIf { it.isNotEmpty() },
                         lemma = k.lemma?.takeIf { it.isNotBlank() }
                             ?: wordLevels.lemma(part),
                         affix = encode(k.affix?.map { listOf(it.part, it.type.orEmpty(), it.meaning.orEmpty()) }.orEmpty()),
@@ -319,6 +321,9 @@ class CardRepository(
                 val entry = wordLevels.lookup(tl) ?: continue
                 // 词表扩容后含无级别词（仅音标/释义兜底），补缺只加有级别的考试词。
                 if (entry.base || entry.level.isEmpty()) continue
+                // 同形异义变形（felt→feel）：词表把 felt 标成专八「毡」，句中却是四级基础词 feel
+                // 的过去式；补缺只该加超纲词，这类词的超纲级别属于另一词义，补了只会带出错义，跳过。
+                if (wordLevels.homographOfBase(tl)) continue
                 // 词表释义自带词性前缀（「n. 峡谷」），拆出 pos 独立展示，避免「n.」出现在翻译前。
                 val (pos, meaning) = Keywords.splitPos(entry.meaning)
                 words.add(

@@ -18,6 +18,7 @@ class WordLevelsTest {
             "knock" to WordLevels.Entry("雅思", "/nɑk/", "v. 敲"),
             "crouch" to WordLevels.Entry("雅思", "/kraʊtʃ/", "vi. 蹲伏", phoneticUs = "/kraʊtʃ/"),
             "crouched" to WordLevels.Entry("六级", "", "adj. 蜷伏的"),
+            "feel" to WordLevels.Entry("雅思", "/fiːl/", "感觉，摸，感知；同情", base = true),
             "robe" to WordLevels.Entry("考研", "/rəʊb/", "n. 长袍", phoneticUs = "/roʊb/"),
             "go" to WordLevels.Entry("考研", "/ɡoʊ/", "v. 去", phoneticUs = "/ɡoʊ/"),
             "kneel" to WordLevels.Entry("专八", "/niːl/", "vi. 跪下", phoneticUs = "/niːl/"),
@@ -108,6 +109,33 @@ class WordLevelsTest {
         assertNull(levels.lemma("trot"))
         assertNull(levels.lemma("loomed"))
         assertNull(levels.lemma(""))
+    }
+
+    // ---------- 同形异义变形 ----------
+
+    @Test
+    fun `homographOfBase true when surface entry is homograph of base lemma`() {
+        // felt：词表单列为专八名词「毡」，原形 feel 是四级基础词（IRREGULAR 表）。
+        assertTrue(levels.homographOfBase("felt"))
+        // sweeping：词表单列专八「扫除」，原形 sweep 是四级基础词（规则变形推导）。
+        assertTrue(levels.homographOfBase("sweeping"))
+    }
+
+    @Test
+    fun `homographOfBase false for inflections of non-base words`() {
+        // crouched 词条独立存在，但原形 crouch 非四级基础词：词表释义仍可信。
+        assertFalse(levels.homographOfBase("crouched"))
+        assertFalse(levels.homographOfBase("hurtled"))
+        assertFalse(levels.homographOfBase("cries"))
+        assertFalse(levels.homographOfBase("knelt"))
+    }
+
+    @Test
+    fun `homographOfBase false for base form and miss`() {
+        assertFalse(levels.homographOfBase("trot"))
+        assertFalse(levels.homographOfBase("sweep"))
+        assertFalse(levels.homographOfBase("xyzzy"))
+        assertFalse(levels.homographOfBase(""))
     }
 
     // ---------- 不规则变形（IRREGULAR 表） ----------
