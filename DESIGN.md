@@ -225,3 +225,14 @@ LlmUsage (大模型调用记录，独立于卡片，统计「调用次数 / Toke
 - 采集→分析成功率 ≥ 95%（容错链目标）
 - 打开 App 到开始复习 ≤ 3 步
 - 每日复习流程 5 分钟内可完成
+
+## 11. 已知取舍与坑
+
+### 分享来源为什么一直是「系统分享」（2026-08-31 诊断，保持现状）
+
+- **现象**：Android 11+ 上所有分享卡片的来源都是「系统分享」，v0.2.2 之前正常显示来源 app 名/书名。
+- **原因**：`dec22ce`（v0.2.2）把分享接收从 Activity（`MainActivity`，系统会写 referrer/callingPackage，`getReferrer()` 可解析来源包名）换成了后台绑定 Service（`ShareReceiverService`，分享零切换）。系统只为 Activity 启动写 referrer/callingPackage，**Service 收不到**；阅读 app 分享选中文本时通常只带 `EXTRA_TEXT`，不带 `EXTRA_TITLE`/`EXTRA_SUBJECT`，系统也不对 Service 路径注入 `EXTRA_REFERRER_NAME`（AOSP：referrer 仅 fillIn 到走 `startActivityAsCaller` 的直接分享目标），ClipData 无 label → `ShareSource` 解析链全空 → 降级「系统分享」。
+- **决定**：保持现状（零切换体验优先，来源信息对产品价值有限）。
+- **若未来要恢复来源**，两条路：
+  1. 回退 Activity 接收（`ShareReceiverActivity` 全版本启用、停用 Service 入口）——恢复来源但分享时有一次任务切换闪现（即 `dec22ce` 消除的体验）；
+  2. Service + `UsageStatsManager` 兜底——分享到达瞬间来源 app 仍在最前台（零切换设计的前提），查最近 foreground 事件拿包名解析来源；需用户开「使用情况访问」特殊权限（设置 → 应用 → 拾句 → 使用情况访问）。
