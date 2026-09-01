@@ -136,11 +136,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ReviewSession())
 
-    /** 当前复习卡的重点词（随 session.card 预载）：首帧即带高亮渲染，避免异步加载导致的字体/样式跳变。 */
+    /** 当前复习卡的重点词（随 session.card 预载）：首帧即带高亮渲染，避免异步加载导致的字体/样式跳变。
+     * 以整张卡为键（而非仅 id）：重新分析后队列刷新出同 id 新内容时也要重查词表。 */
     val reviewWords: StateFlow<List<CardWord>> = reviewSession
-        .map { it.card?.id }
+        .map { it.card }
         .distinctUntilChanged()
-        .map { id -> if (id != null) repo.wordsOfCard(id) else emptyList() }
+        .map { card -> if (card != null) repo.wordsOfCard(card.id) else emptyList() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** 全局序号：卡片库/复习显示同一编号（收藏时间倒序排名），两处可互相对照。 */
@@ -315,6 +316,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 repo.reanalyze(cardId)
             } finally {
                 _detailAnalyzing.value = _detailAnalyzing.value - cardId
+            }
+            if (started) {
+                // 重新分析改了卡片内容：复习队列里还是旧快照，就地刷新（含加练队列）。
+                refreshDue()
+                _practiceWord.value?.let { w ->
+                    if (practiceQueue.value.any { it.id == cardId }) {
+                        practiceQueue.value = repo.cardsByWord(w)
+                    }
+                }
             }
             analysisTick.value++
             statsTick.value++

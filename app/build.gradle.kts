@@ -8,7 +8,7 @@ plugins {
 }
 
 // 版本单一来源：versionName 与 APK 产物名共用
-val appVersionName = "0.4.0"
+val appVersionName = "0.4.1"
 
 // 发布签名：keystore.properties 不入库，缺失时 release 产出未签名 APK
 val keystorePropsFile = rootProject.file("keystore.properties")
@@ -25,7 +25,7 @@ android {
         applicationId = "com.readlet.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
+        versionCode = 11
         versionName = appVersionName
     }
 
