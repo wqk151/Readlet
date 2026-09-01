@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.readlet.app.data.db.Card
+import com.readlet.app.data.db.CardStatus
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.ui.AppViewModel
 import com.readlet.app.ui.EmptyHint
@@ -105,6 +106,7 @@ fun ReviewScreen(vm: AppViewModel) {
                     flipped = false
                 },
                 onMaster = { vm.masterCard(card.id) },
+                onShowDetail = { vm.openDetail(card.id) },
             )
         }
     }
@@ -168,6 +170,7 @@ private fun Flashcard(
     onClickFlip: () -> Unit,
     onGrade: (Int) -> Unit,
     onMaster: () -> Unit,
+    onShowDetail: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth()
@@ -192,16 +195,32 @@ private fun Flashcard(
                 Modifier.weight(1f).fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
             ) {
-                Text(
-                    "← 返回题目",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.align(Alignment.Start)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onClickFlip() }
-                        .padding(vertical = 4.dp, horizontal = 2.dp),
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "← 返回题目",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                            .clickable { onClickFlip() }
+                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                    )
+                    if (card.status == CardStatus.ANALYZED) {
+                        Text(
+                            "完整分析 →",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                                .clickable { onShowDetail() }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                        )
+                    }
+                }
                 card.translation?.let {
                     Text(
                         it,

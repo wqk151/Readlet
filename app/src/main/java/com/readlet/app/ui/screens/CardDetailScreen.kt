@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.readlet.app.data.db.Card
@@ -69,6 +70,9 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
     LaunchedEffect(cardId) { scrollState.scrollTo(0) }
 
     val c = card
+    // 覆盖层内注册返回键：优先于下层页面（复习页答案面等）注册的返回键，先关详情再回退。
+    BackHandler { vm.closeDetail() }
+
     Column(
         Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
