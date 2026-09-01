@@ -31,6 +31,19 @@ Gradle: 使用 wrapper（8.9）
 - **发布流程（规范）**：任何新增需求、优化、bug 修复完成后 → bump `appVersionName`（功能 minor / 修复 patch）+ `versionCode` +1 → `./gradlew assembleRelease`（自动走 `keystore.properties` 的 `readlet-release.keystore` 签名）→ `adb install -r app/build/outputs/apk/release/Readlet-v<versionName>-release.apk`（同签名覆盖，数据不丢；设备上已装 release 签名，勿用 debug 包覆盖）
 - 调试：真机 adb（vivo V2217A）；数据库拉取 `adb shell run-as com.readlet.app cat databases/readlet.db`
 
+### 2.1 真机验证 SOP（UI 改动必读）
+
+- **安装**：`./gradlew assembleRelease` → `adb install -r app/build/outputs/apk/release/Readlet-v<versionName>-release.apk`（同签名覆盖，数据不丢；**禁止 debug 包覆盖线上**）；装完 `adb shell dumpsys package com.readlet.app | grep -m2 versionName` 确认版本生效
+- **启动/复位**：`adb shell am force-stop com.readlet.app && adb shell am start -n com.readlet.app/.MainActivity`（force-stop 清掉内存态 UI 状态，如搜索框残留）
+- **坐标定位**：先 `adb shell uiautomator dump /sdcard/ui.xml && adb pull`，解析 XML 里节点的 `text` 与 `bounds`（Compose 节点同样可见），再 `adb shell input tap X Y`——**不要目测截图估坐标**（dp 换算易点偏，且无失败反馈）
+- **输入/滚动**：`adb shell input text "130"`（纯 ASCII）；`adb shell input swipe X1 Y1 X2 Y2 400`；键盘弹出会遮挡内容，截图前先 `adb shell input keyevent 4` 收键盘
+- **截图（关键坑）**：
+  - `adb exec-out screencap -p` 管道输出在多显示器/管道场景常损坏（`file` 检测为 `data`）→ **必须** `adb shell screencap -p /sdcard/x.png && adb pull /sdcard/x.png /tmp/x.png`（多显示器 warning 时加 `-d <display-id>`）
+  - 图片分析用 **inspect_image**（`write` JSON 到 `xd://inspect_image`，字段 `path` + `question`）——`read` 工具读不了 PNG 二进制
+  - 分析前 `file /tmp/x.png` 应输出 `PNG image data`，否则重截
+  - 用完清理：`adb shell rm /sdcard/x.png` 与本地临时文件
+- **状态验证**：数据库 `adb shell run-as com.readlet.app cat databases/readlet.db`（或 pull 后用 sqlite 查询）
+
 ## 3. 项目结构
 
 ```
@@ -116,7 +129,7 @@ insertCard(text, source) → status=ANALYZING
 
 ### 4.6 卡片库 UI（todo #1/#2/#5）
 - LazyColumn + `rememberLazyListState` + `VerticalScrollbar`（`rememberLazyListScrollbarAdapter`）。
-- 头部显示「共 N 条」；每张卡显示**全局序号**（按 createdAt 倒序排名 #N），复习页显示同一编号（`AppViewModel.cardSeq` 派生），两处可互相对照。
+- 头部显示「共 N 条」；每张卡显示**固定编号** `#<Card.id>`（v0.5 起：AUTOINCREMENT 永不复用、备份恢复不变），复习页/详情页显示同一编号，两处可互相对照；搜索框输入纯数字按编号定位（未命中显示专属空态）。取代 v0.4 的「按 createdAt 倒序排名」全局序号（随增删变化，不可作稳定引用；`AppViewModel.cardSeq` 已移除）。
 
 ### 4.7 复习页渲染（todo #6）
 - 根因：切页首帧队列未加载完先显示空态（默认字体），随后才渲染衬线句子 → 字体跳变。
