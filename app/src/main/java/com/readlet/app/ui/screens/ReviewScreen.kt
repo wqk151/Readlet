@@ -64,7 +64,6 @@ import com.readlet.app.ui.theme.SentenceType as SentenceTextStyle
 fun ReviewScreen(vm: AppViewModel) {
     val session by vm.reviewSession.collectAsStateWithLifecycle()
     val words by vm.reviewWords.collectAsStateWithLifecycle()
-    val seqOf by vm.cardSeq.collectAsStateWithLifecycle()
     val reviewCounts by vm.reviewCounts.collectAsStateWithLifecycle()
     var flipped by remember { mutableStateOf(false) }
 
@@ -95,7 +94,6 @@ fun ReviewScreen(vm: AppViewModel) {
             else -> Flashcard(
                 card = card,
                 words = words,
-                seq = seqOf[card.id] ?: 0,
                 reviewCount = reviewCounts[card.id] ?: 0,
                 flipped = flipped,
                 isPractice = session.isPractice,
@@ -162,7 +160,6 @@ private fun ReviewHead(session: com.readlet.app.ui.ReviewSession) {
 private fun Flashcard(
     card: Card,
     words: List<CardWord>,
-    seq: Int,
     reviewCount: Int,
     flipped: Boolean,
     isPractice: Boolean,
@@ -179,16 +176,14 @@ private fun Flashcard(
             .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // 全局序号：与卡片库同一编号，可互相对照。
-        if (seq > 0) {
-            Text(
-                "#$seq · 已复习 $reviewCount 次",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Muted,
-                modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp),
-            )
-        }
+        // 固定编号：Card.id（AUTOINCREMENT 永不复用），与卡片库同一编号，可互相对照。
+        Text(
+            "#${card.id} · 已复习 $reviewCount 次",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = Muted,
+            modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp),
+        )
         if (flipped) {
             // 背面：译文 + 重点词 + 语法（可滚动，长句不裁剪）
             Column(

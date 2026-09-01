@@ -86,7 +86,6 @@ private const val PAGE_SIZE = 30
 fun LibraryScreen(vm: AppViewModel) {
     val items by vm.inboxItems.collectAsStateWithLifecycle()
     val streak by vm.streak.collectAsStateWithLifecycle()
-    val seqOf by vm.cardSeq.collectAsStateWithLifecycle()
     val reviewCounts by vm.reviewCounts.collectAsStateWithLifecycle()
     val analyzing by vm.analyzing.collectAsStateWithLifecycle()
     val detailAnalyzing by vm.detailAnalyzing.collectAsStateWithLifecycle()
@@ -97,9 +96,13 @@ fun LibraryScreen(vm: AppViewModel) {
     val focusManager = LocalFocusManager.current
 
     val q = query.trim()
-    // 词级搜索：句子或任一重点词命中（整词/词首/词内包含/词组），按匹配分排序。
+    // 编号定位：纯数字查询按固定编号（Card.id，AUTOINCREMENT 永不复用）精确匹配；
+    // 否则词级搜索：句子或任一重点词命中（整词/词首/词内包含/词组），按匹配分排序。
+    val idQuery = q.toLongOrNull()
     val filtered = if (q.isEmpty()) {
         items.filter { item -> matchFilter(item, filter) }
+    } else if (idQuery != null) {
+        items.filter { matchFilter(it, filter) && it.card.id == idQuery }
     } else {
         items.mapNotNull { item ->
             if (!matchFilter(item, filter)) return@mapNotNull null
@@ -211,7 +214,11 @@ fun LibraryScreen(vm: AppViewModel) {
                 "还没有拾到句子",
                 "阅读时选中喜欢的句子 → 分享 → 选择「拾句」，\n即可收藏，点「一键分析」或详情页「开始分析」生成可复习的卡片。",
             )
-            filtered.isEmpty() -> EmptyHint("没有符合条件的卡片", "换个关键词或筛选条件试试。")
+            filtered.isEmpty() -> if (idQuery != null) {
+                EmptyHint("没有找到编号 #$idQuery 的卡片", "编号与卡片一一对应；输入卡片库/复习页显示的编号即可定位。")
+            } else {
+                EmptyHint("没有符合条件的卡片", "换个关键词或筛选条件试试。")
+            }
             else -> Box(Modifier.fillMaxSize()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(end = 6.dp),
@@ -222,7 +229,6 @@ fun LibraryScreen(vm: AppViewModel) {
                     items(filtered.take(visibleCount), key = { it.card.id }) { item ->
                         LibRow(
                             item,
-                            seq = seqOf[item.card.id] ?: 0,
                             reviewCount = reviewCounts[item.card.id] ?: 0,
                             query = q,
                             batchRunning = analyzing != null,
@@ -288,7 +294,7 @@ private fun SearchField(query: String, onSearch: () -> Unit, onChange: (String) 
             .padding(horizontal = 14.dp, vertical = 11.dp),
         decorationBox = { inner ->
             if (query.isEmpty()) {
-                Text("搜索句子 / 单词（支持模糊）…", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("搜索句子 / 单词 / 编号…", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             inner()
         },
@@ -321,7 +327,6 @@ private fun FilterChip(label: String, selected: Boolean, count: Int = 0, onClick
 @Composable
 private fun LibRow(
     item: InboxItem,
-    seq: Int,
     reviewCount: Int,
     query: String,
     batchRunning: Boolean,
@@ -334,16 +339,14 @@ private fun LibRow(
     var confirmDelete by remember { mutableStateOf(false) }
     CardSurface(onClick = onClick) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // 全局序号：与复习页同一编号（收藏时间倒序排名），可互相对照。
-            if (seq > 0) {
-                Text(
-                    "#$seq",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Muted,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
+            // 固定编号：Card.id（AUTOINCREMENT 永不复用），与复习页/详情页同一编号，可互相对照。
+            Text(
+                "#${item.card.id}",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Muted,
+                modifier = Modifier.padding(end = 8.dp),
+            )
             Spacer(Modifier.weight(1f))
             // 角标：批量分析中 → 未完成的统一显示「分析中…」（后台实际逐个进行，先到先亮）；
             // 否则分析未完成 → 实际状态；已分析未学习 → 待学习；已学习 → 已分析。

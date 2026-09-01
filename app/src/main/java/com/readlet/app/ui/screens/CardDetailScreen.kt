@@ -251,7 +251,7 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "${c.source} · ${c.createdAt.toLocalString()}",
+                    "#${c.id} · ${c.source} · ${c.createdAt.toLocalString()}",
                     fontSize = 11.sp,
                     color = Muted,
                 )

@@ -144,10 +144,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         .map { card -> if (card != null) repo.wordsOfCard(card.id) else emptyList() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** 全局序号：卡片库/复习显示同一编号（收藏时间倒序排名），两处可互相对照。 */
-    val cardSeq: StateFlow<Map<Long, Int>> = _inboxItems
-        .map { items -> items.mapIndexed { i, it -> it.card.id to i + 1 }.toMap() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
     /** 每卡排程复习次数（type=0）：卡片库/复习页「已复习 N 次」数据源。 */
     val reviewCounts: StateFlow<Map<Long, Int>> = repo.observeReviewCounts()
         .map { list -> list.associate { it.cardId to it.cnt } }
