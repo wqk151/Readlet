@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -88,6 +89,7 @@ fun LibraryScreen(vm: AppViewModel) {
     val seqOf by vm.cardSeq.collectAsStateWithLifecycle()
     val reviewCounts by vm.reviewCounts.collectAsStateWithLifecycle()
     val analyzing by vm.analyzing.collectAsStateWithLifecycle()
+    val detailAnalyzing by vm.detailAnalyzing.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(LibFilter.ALL) }
     var visibleCount by remember { mutableStateOf(PAGE_SIZE) }
@@ -228,6 +230,8 @@ fun LibraryScreen(vm: AppViewModel) {
                                 focusManager.clearFocus()
                                 vm.openDetail(item.card.id)
                             },
+                            reanalyzing = item.card.id in detailAnalyzing,
+                            onReanalyze = { vm.reanalyze(item.card.id) },
                             onDelete = { vm.deleteCard(item.card.id) },
                         )
                     }
@@ -322,6 +326,8 @@ private fun LibRow(
     query: String,
     batchRunning: Boolean,
     onClick: () -> Unit,
+    reanalyzing: Boolean,
+    onReanalyze: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -369,6 +375,25 @@ private fun LibRow(
                     containerColor = MaterialTheme.colorScheme.surface,
                     shadowElevation = 6.dp,
                 ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text("重新分析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Filled.Refresh,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        enabled = !reanalyzing,
+                        onClick = {
+                            menuOpen = false
+                            onReanalyze()
+                        },
+                        modifier = Modifier.width(132.dp),
+                    )
                     DropdownMenuItem(
                         text = {
                             Text("删除", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Red)
