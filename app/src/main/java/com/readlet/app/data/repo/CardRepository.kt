@@ -42,11 +42,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-/** 句中分词（字母+撇号），级别词补缺用。 */
-private val TOKEN = Regex("[A-Za-z']+")
-
 /** 「一键分析」并发上限。 */
 private const val ANALYZE_CONCURRENCY = 5
+
+/** 级别词补缺上限（每卡）：LLM 关键词外的查缺补漏数量封顶，防止整句刷角标。 */
+private const val FILL_CAP = 10
 
 /**
  * 核心业务编排：采集 → 分析（LLM+容错链）→ 复习（SM-2）→ 统计。
@@ -258,7 +258,7 @@ class CardRepository(
      * 1. LLM 关键词按 [Keywords.splitKeyword] 拆分（LLM 偶发把并列结构合并成一个关键词），
      *    每项一条；音标（英/美）/级别/原型/词性/释义均 LLM 优先、命中级别表则词表兜底。
      * 2. 句子分词 → 级别表查缺补漏（六级/考研/雅思/专四/专八），跳过已被 LLM 关键词覆盖的词，
-     *    上限 5 个（防止整句刷角标）。
+     *    上限 [FILL_CAP] 个（防止整句刷角标）；筛选规则见 [KeywordFill]。
      */
     private fun buildCardWords(card: Card, result: AnalyzeResult): List<CardWord> {
         val words = ArrayList<CardWord>()
@@ -305,41 +305,28 @@ class CardRepository(
                 )
             }
         }
-        // 级别词补缺：仅完整句子卡（单词/短语卡的输入本身就是关键词）；上限 5 个。
-        // 跳过功能词与四级基础词（词表会误标 were/even/air 这类词，补了只会刷满高亮）。
-        if (result.mode == "sentence" && words.size < 10) {
+        // 级别词补缺：仅完整句子卡（单词/短语卡的输入本身就是关键词）；上限 FILL_CAP 个，
+        // LLM 关键词已达 FILL_CAP 时不再补（防止整句刷角标）。候选筛选举见 [KeywordFill]。
+        if (result.mode == "sentence" && words.size < FILL_CAP) {
             val covered = words.map { it.word.lowercase() }
-            val processed = HashSet<String>()
-            var added = 0
-            for (t in TOKEN.findAll(card.text)) {
-                val tl = t.value.lowercase()
-                if (!processed.add(tl)) continue
-                if (Keywords.isFunctionWord(tl)) continue
-                // 首字母大写多为专有名词（Harry/McGonagall），柯林斯会误标级别，跳过
-                if (t.value[0].isUpperCase()) continue
-                if (covered.any { it == tl || it.contains(tl) || tl.contains(it) }) continue
-                val entry = wordLevels.lookup(tl) ?: continue
-                // 词表扩容后含无级别词（仅音标/释义兜底），补缺只加有级别的考试词。
-                if (entry.base || entry.level.isEmpty()) continue
-                // 同形异义变形（felt→feel）：词表把 felt 标成专八「毡」，句中却是四级基础词 feel
-                // 的过去式；补缺只该加超纲词，这类词的超纲级别属于另一词义，补了只会带出错义，跳过。
-                if (wordLevels.homographOfBase(tl)) continue
-                // 词表释义自带词性前缀（「n. 峡谷」），拆出 pos 独立展示，避免「n.」出现在翻译前。
-                val (pos, meaning) = Keywords.splitPos(entry.meaning)
+            for (c in KeywordFill.select(card.text, covered, wordLevels, FILL_CAP)) {
+                // 释义/词性优先 surface 词条（词形与句中一致，如「n. 材料；佐料」），
+                // 缺失时用级别词条（多为变形原形）释义；自带词性前缀的拆出 pos 独立展示。
+                val (pos, meaning) = Keywords.splitPos(
+                    c.surface?.meaning?.takeIf { it.isNotBlank() } ?: c.entry.meaning
+                )
                 words.add(
                     CardWord(
                         cardId = card.id,
-                        word = t.value,
-                        phonetic = wordLevels.phoneticOf(t.value),
-                        phoneticUs = wordLevels.phoneticUsOf(t.value),
+                        word = c.word,
+                        phonetic = wordLevels.phoneticOf(c.word),
+                        phoneticUs = wordLevels.phoneticUsOf(c.word),
                         pos = pos,
                         meaningInContext = meaning,
                         orderIdx = idx++,
-                        level = entry.level,
+                        level = c.entry.level,
                     )
                 )
-                added++
-                if (added >= 5) break
             }
         }
         return words

@@ -2,6 +2,7 @@ package com.readlet.app.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -18,6 +19,9 @@ class WordLevelsTest {
             "knock" to WordLevels.Entry("雅思", "/nɑk/", "v. 敲"),
             "crouch" to WordLevels.Entry("雅思", "/kraʊtʃ/", "vi. 蹲伏", phoneticUs = "/kraʊtʃ/"),
             "crouched" to WordLevels.Entry("六级", "", "adj. 蜷伏的"),
+            "ingredient" to WordLevels.Entry("雅思", "/ɪnˈɡriːdiənt/", "n. 配料"),
+            "ingredients" to WordLevels.Entry("", "/ɪnˈɡriːdiənts/", "n. 材料；佐料"),
+            "goods" to WordLevels.Entry("", "/ɡʊdz/", "n. 商品"),
             "feel" to WordLevels.Entry("雅思", "/fiːl/", "感觉，摸，感知；同情", base = true),
             "robe" to WordLevels.Entry("考研", "/rəʊb/", "n. 长袍", phoneticUs = "/roʊb/"),
             "go" to WordLevels.Entry("考研", "/ɡoʊ/", "v. 去", phoneticUs = "/ɡoʊ/"),
@@ -192,5 +196,38 @@ class WordLevelsTest {
         assertEquals("/maʊs/", levels.phoneticUsOf("mice"))
         assertEquals("/ɡoʊ/", levels.phoneticUsOf("went"))
         assertNull(levels.phoneticUsOf("xyzzy"))
+    }
+
+    // ---------- 级别词条查询（补缺用，跳过无级别 surface） ----------
+
+    @Test
+    fun `leveledEntryOf returns direct leveled entry`() {
+        assertEquals("六级", levels.leveledEntryOf("trot")!!.level)
+        assertEquals("雅思", levels.leveledEntryOf("ingredient")!!.level)
+    }
+
+    @Test
+    fun `leveledEntryOf skips no-level surface and finds leveled base`() {
+        // ingredients：柯林斯单列无级别兜底词条（仅音标/释义），原形 ingredient 雅思——遮蔽不能漏级别
+        val e = levels.leveledEntryOf("ingredients")!!
+        assertEquals("雅思", e.level)
+        assertEquals("n. 配料", e.meaning)
+    }
+
+    @Test
+    fun `leveledEntryOf finds leveled base when surface absent`() {
+        assertEquals("考研", levels.leveledEntryOf("boxes")!!.level)
+        assertTrue(levels.leveledEntryOf("boxes")!!.base)
+        assertEquals("六级", levels.leveledEntryOf("mice")!!.level)
+        assertEquals("考研", levels.leveledEntryOf("went")!!.level)
+    }
+
+    @Test
+    fun `leveledEntryOf null when no leveled form anywhere`() {
+        // goods 有无级别词条但无带级别原形：与 lookup 不同（lookup 命中即返）
+        assertNotNull(levels.lookup("goods"))
+        assertNull(levels.leveledEntryOf("goods"))
+        assertNull(levels.leveledEntryOf("xyzzy"))
+        assertNull(levels.leveledEntryOf(""))
     }
 }

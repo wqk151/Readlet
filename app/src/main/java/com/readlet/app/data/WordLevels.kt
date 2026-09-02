@@ -99,6 +99,26 @@ class WordLevels internal constructor(
         return null
     }
 
+    /**
+     * 带级别词条查询：surface 词条本身带级别 → 返回；surface 是无级别词条
+     * （柯林斯缓存全量兜底词，仅音标/释义）或未收录 → 跳过继续查规则/不规则变形原形，
+     * 命中首个带级别词条返回（ingredients → ingredient 雅思、rebellions → rebellion 考研）。
+     * [lookup] 的补充：lookup 命中即停，级别补缺需要跳过无级别词条（对齐 [phoneticOf]
+     * 跳过空音标词条——否则柯林斯把无级别变形词条单列时，原形的考试级别会被遮蔽漏补）。
+     */
+    fun leveledEntryOf(token: String): Entry? {
+        val w = token.trim().lowercase()
+        if (w.isEmpty()) return null
+        map[w]?.let { if (it.level.isNotEmpty()) return it }
+        for (baseForm in forms(w)) {
+            map[baseForm]?.let { if (it.level.isNotEmpty()) return it }
+        }
+        IRREGULAR[w]?.let { base ->
+            map[base]?.let { if (it.level.isNotEmpty()) return it }
+        }
+        return null
+    }
+
     companion object {
         /** 从资产加载（进程启动一次）。资产缺失时返回空表（不应发生）。 */
         fun load(context: Context): WordLevels {
