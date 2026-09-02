@@ -35,6 +35,7 @@ import com.readlet.app.ui.screens.CardDetailScreen
 import com.readlet.app.ui.screens.LibraryScreen
 import com.readlet.app.ui.screens.ReviewScreen
 import com.readlet.app.ui.screens.SettingsDialog
+import com.readlet.app.ui.screens.VoiceSettingsDialog
 import com.readlet.app.ui.screens.StatsScreen
 import com.readlet.app.ui.screens.WordDetailScreen
 
@@ -45,6 +46,7 @@ fun Root(vm: AppViewModel) {
     val detailCardId by vm.detailCardId.collectAsStateWithLifecycle()
     val detailWord by vm.detailWord.collectAsStateWithLifecycle()
     val settingsOpen by vm.settingsOpen.collectAsStateWithLifecycle()
+    val voiceSettingsOpen by vm.voiceSettingsOpen.collectAsStateWithLifecycle()
     val toast by vm.toast.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -60,7 +62,8 @@ fun Root(vm: AppViewModel) {
         }
     }
 
-    // 返回键优先级：设置 > 词频详情 > 卡片详情
+    // 返回键优先级：发音设置 > 设置 > 词频详情 > 卡片详情
+    BackHandler(enabled = voiceSettingsOpen) { vm.closeVoiceSettings() }
     BackHandler(enabled = settingsOpen) { vm.settingsOpen.value = false }
     BackHandler(enabled = detailWord != null) { vm.closeWord() }
     BackHandler(enabled = detailCardId != null) { vm.closeDetail() }
@@ -83,6 +86,8 @@ fun Root(vm: AppViewModel) {
         detailCardId?.let { CardDetailScreen(vm, it, backLabelFor(tab)) }
         detailWord?.let { WordDetailScreen(vm, it) }
         if (settingsOpen) SettingsDialog(vm)
+        // 发音设置由主设置入口打开，叠在其上（两个 AlertDialog 同屏允许）。
+        if (voiceSettingsOpen) VoiceSettingsDialog(vm)
 
         // Snackbar 置于覆盖层之上：全屏详情页打开时 toast 仍可见。
         SnackbarHost(

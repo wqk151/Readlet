@@ -7,6 +7,7 @@ import android.text.style.StyleSpan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -14,7 +15,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +33,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.readlet.app.data.db.CardStatus
@@ -247,4 +255,74 @@ fun CardSurface(onClick: (() -> Unit)? = null, content: @Composable ColumnScope.
         .padding(14.dp)
     val clickable = if (onClick != null) base.clickable(onClick = onClick) else base
     Column(clickable, content = content)
+}
+
+/**
+ * 重点词条目行（词/词组）：词+词性一行，行尾可选发音喇叭；元信息一行；释义紧随其后。
+ * 详情页与复习页背面共用，消除两处重复布局；样式差异走参数（字号/颜色/纵距）。
+ */
+@Composable
+fun KeywordRow(
+    word: String,
+    pos: String?,
+    meaning: String,
+    phonetic: String?,
+    phoneticUs: String?,
+    level: String?,
+    lemma: String?,
+    affix: String? = null,
+    wordFontSize: TextUnit = 15.sp,
+    wordColor: Color = Green,
+    verticalPadding: Dp = 5.dp,
+    meaningColor: Color = Color.Unspecified,
+    onSpeak: (() -> Unit)? = null,
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = verticalPadding)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(word, fontSize = wordFontSize, fontWeight = FontWeight.Bold, color = wordColor)
+            pos?.let {
+                Text(it, fontSize = 12.sp, color = Blue, modifier = Modifier.padding(start = 6.dp))
+            }
+            if (onSpeak != null) {
+                Spacer(Modifier.weight(1f))
+                SpeakButton(onSpeak)
+            }
+        }
+        // 原型：调用方负责解析（LLM 值 / 词表兜底），此处仅展示。
+        KeywordMetaLine(
+            word = word,
+            phonetic = phonetic,
+            phoneticUs = phoneticUs,
+            level = level,
+            lemma = lemma,
+            affix = affix,
+        )
+        meaning.takeIf { it.isNotBlank() }?.let { m ->
+            Text(
+                m,
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                color = meaningColor,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+/** 发音喇叭：32dp 圆形热区 + 18dp 图标；供词行与搭配行使用。 */
+@Composable
+fun SpeakButton(onClick: () -> Unit) {
+    Box(
+        Modifier.size(32.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.VolumeUp,
+            contentDescription = "播放发音",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
+    }
 }

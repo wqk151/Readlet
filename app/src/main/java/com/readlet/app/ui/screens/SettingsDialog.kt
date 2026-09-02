@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.readlet.app.data.Settings
+import com.readlet.app.tts.TtsIds
+import com.readlet.app.tts.VoiceCatalog
 import com.readlet.app.ui.AppViewModel
 
 /** 设置：API Key / Base URL / 模型 / 翻译术语表。保存后重建 LLM 客户端。 */
@@ -43,6 +45,7 @@ import com.readlet.app.ui.AppViewModel
 @Composable
 fun SettingsDialog(vm: AppViewModel) {
     val state by vm.settingsState.collectAsStateWithLifecycle()
+    val ttsState by vm.ttsManager.state.collectAsStateWithLifecycle()
     var apiKey by remember { mutableStateOf(state.apiKey) }
     var baseUrl by remember { mutableStateOf(state.baseUrl) }
     var model by remember { mutableStateOf(state.model) }
@@ -170,6 +173,23 @@ fun SettingsDialog(vm: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
                 )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "发音",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = { vm.openVoiceSettings() }) {
+                    Text("发音设置…")
+                }
+                Text(
+                    voiceEngineCaption(ttsState.engineId, ttsState.voiceId, ttsState.packInstalled),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         },
         confirmButton = {
@@ -179,4 +199,15 @@ fun SettingsDialog(vm: AppViewModel) {
             TextButton(onClick = { vm.settingsOpen.value = false }) { Text("取消") }
         },
     )
+}
+
+/** 主设置里「发音」入口下的当前状态说明。 */
+private fun voiceEngineCaption(engineId: String, voiceId: String, packInstalled: Boolean): String = when (engineId) {
+    TtsIds.ENGINE_LOCAL ->
+        if (packInstalled) {
+            "本地语音引擎（kokoro）· 音色 ${VoiceCatalog.labelOf(voiceId)}"
+        } else {
+            "本地语音引擎（kokoro）· 语音包未下载，播放回退系统语音"
+        }
+    else -> "系统语音（默认开箱即用；可切换本地引擎获得稳定离线美音）"
 }

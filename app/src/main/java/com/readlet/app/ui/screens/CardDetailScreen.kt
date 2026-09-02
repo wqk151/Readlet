@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,9 +37,10 @@ import com.readlet.app.data.db.Card
 import com.readlet.app.data.db.CardStatus
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.ui.AppViewModel
-import com.readlet.app.ui.KeywordMetaLine
+import com.readlet.app.ui.KeywordRow
 import com.readlet.app.ui.Keywords
 import com.readlet.app.ui.SentenceText
+import com.readlet.app.ui.SpeakButton
 import com.readlet.app.ui.StatusChip
 import com.readlet.app.ui.theme.Amber
 import com.readlet.app.ui.theme.Blue
@@ -68,6 +70,11 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
     // 连播切卡（加入复习 → 下一张待学习卡）时回到顶部，新卡从头读起。
     val scrollState = rememberScrollState()
     LaunchedEffect(cardId) { scrollState.scrollTo(0) }
+
+    // 关详情/切卡即停掉当前发音（全局单实例播放）。
+    DisposableEffect(cardId) {
+        onDispose { vm.stopPronunciation() }
+    }
 
     val c = card
     // 覆盖层内注册返回键：优先于下层页面（复习页答案面等）注册的返回键，先关详情再回退。
@@ -132,33 +139,18 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                             val split = remember(w) { Keywords.splitPos(w.meaningInContext ?: "") }
                             val pos = w.pos ?: split.first
                             val meaning = split.second
-                            // 词+词性一行；元信息一行（英/美音标 · 原型 · 级别，中点号隔开）；释义紧随其后：
-                            // 长词组音标不再被挤进窄列堆叠，与释义间也不留空白。
-                            Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(w.word, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Green)
-                                    pos?.let {
-                                        Text(" $it", fontSize = 12.sp, color = Blue)
-                                    }
-                                }
-                                // 原型：存储值（LLM 提供 / 分析时词表兜底）优先，旧数据渲染时词表查表兜底。
-                                KeywordMetaLine(
-                                    word = w.word,
-                                    phonetic = w.phonetic,
-                                    phoneticUs = w.phoneticUs,
-                                    level = w.level,
-                                    lemma = w.lemma ?: remember(w) { vm.lemmaOf(w.word) },
-                                    affix = w.affix,
-                                )
-                                meaning.takeIf { it.isNotBlank() }?.let { m ->
-                                    Text(
-                                        m,
-                                        fontSize = 13.sp,
-                                        lineHeight = 20.sp,
-                                        modifier = Modifier.padding(top = 2.dp),
-                                    )
-                                }
-                            }
+                            // 词+词性+行尾发音喇叭；元信息一行；释义紧随其后（KeywordRow 共用组件）。
+                            KeywordRow(
+                                word = w.word,
+                                pos = pos,
+                                meaning = meaning,
+                                phonetic = w.phonetic,
+                                phoneticUs = w.phoneticUs,
+                                level = w.level,
+                                lemma = w.lemma ?: remember(w) { vm.lemmaOf(w.word) },
+                                affix = w.affix,
+                                onSpeak = { vm.playPronunciation(w.word) },
+                            )
                         }
                     }
                 }
@@ -188,17 +180,24 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "← �
                 if (collocations.isNotEmpty()) {
                     Section("🔗", "搭配积累") {
                         collocations.forEach { row ->
-                            Column(Modifier.padding(vertical = 4.dp)) {
-                                Text(
-                                    "${row.getOrElse(0) { "" }}：${row.getOrElse(1) { "" }}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                row.getOrNull(2)?.takeIf { it.isNotBlank() }?.let {
-                                    Text("例句：$it", fontSize = 13.sp)
+                            // 行首为可发音的短语原文；行尾喇叭播放该短语。
+                            val phrase = row.getOrElse(0) { "" }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                                    Text(
+                                        "$phrase：${row.getOrElse(1) { "" }}",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    row.getOrNull(2)?.takeIf { it.isNotBlank() }?.let {
+                                        Text("例句：$it", fontSize = 13.sp)
+                                    }
+                                    row.getOrNull(3)?.takeIf { it.isNotBlank() }?.let {
+                                        Text(it, fontSize = 12.sp, color = Muted)
+                                    }
                                 }
-                                row.getOrNull(3)?.takeIf { it.isNotBlank() }?.let {
-                                    Text(it, fontSize = 12.sp, color = Muted)
+                                if (phrase.isNotBlank()) {
+                                    SpeakButton(onClick = { vm.playPronunciation(phrase) })
                                 }
                             }
                         }

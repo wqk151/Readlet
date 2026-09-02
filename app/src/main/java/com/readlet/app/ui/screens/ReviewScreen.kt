@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +45,7 @@ import com.readlet.app.data.db.CardStatus
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.ui.AppViewModel
 import com.readlet.app.ui.EmptyHint
-import com.readlet.app.ui.KeywordMetaLine
+import com.readlet.app.ui.KeywordRow
 import com.readlet.app.ui.Keywords
 import com.readlet.app.ui.sentenceSpannable
 import com.readlet.app.ui.theme.Amber
@@ -69,6 +70,11 @@ fun ReviewScreen(vm: AppViewModel) {
 
     val card = session.card
     LaunchedEffect(card?.id) { flipped = false }
+
+    // 翻卡/出队即停掉上一张的发音（全局单实例播放）。
+    DisposableEffect(card?.id) {
+        onDispose { vm.stopPronunciation() }
+    }
 
     // 答案面按返回键 → 翻回题目（再按一次才是退出）
     BackHandler(enabled = flipped) { flipped = false }
@@ -98,6 +104,7 @@ fun ReviewScreen(vm: AppViewModel) {
                 flipped = flipped,
                 isPractice = session.isPractice,
                 lemmaOf = { vm.lemmaOf(it) },
+                onSpeakWord = { vm.playPronunciation(it) },
                 onClickFlip = { flipped = !flipped }, // 正面翻到答案；答案面「返回题目」翻回
                 onGrade = { q ->
                     vm.grade(q)
@@ -164,6 +171,7 @@ private fun Flashcard(
     flipped: Boolean,
     isPractice: Boolean,
     lemmaOf: (String) -> String?,
+    onSpeakWord: (String) -> Unit,
     onClickFlip: () -> Unit,
     onGrade: (Int) -> Unit,
     onMaster: () -> Unit,
@@ -231,37 +239,22 @@ private fun Flashcard(
                         val split = remember(w) { Keywords.splitPos(w.meaningInContext ?: "") }
                         val pos = w.pos ?: split.first
                         val meaning = split.second
-                            // 原型：存储值（LLM 提供 / 分析时词表兜底）优先，旧数据渲染时词表查表兜底。
-                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        w.word,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = HighlightOrange,
-                                    )
-                                    pos?.let { p ->
-                                        Text(p, fontSize = 12.sp, color = Blue, modifier = Modifier.padding(start = 6.dp))
-                                    }
-                                }
-                                KeywordMetaLine(
-                                    word = w.word,
-                                    phonetic = w.phonetic,
-                                    phoneticUs = w.phoneticUs,
-                                    level = w.level,
-                                    lemma = w.lemma ?: lemmaOf(w.word),
-                                    affix = w.affix,
-                                )
-                                meaning.takeIf { it.isNotBlank() }?.let { m ->
-                                    Text(
-                                        m,
-                                        fontSize = 13.sp,
-                                        lineHeight = 20.sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(top = 2.dp),
-                                    )
-                                }
-                            }
+                        // 词+词性+行尾发音喇叭；元信息一行；释义紧随其后（KeywordRow 共用组件）。
+                        KeywordRow(
+                            word = w.word,
+                            pos = pos,
+                            meaning = meaning,
+                            phonetic = w.phonetic,
+                            phoneticUs = w.phoneticUs,
+                            level = w.level,
+                            lemma = w.lemma ?: lemmaOf(w.word),
+                            affix = w.affix,
+                            wordFontSize = 16.sp,
+                            wordColor = HighlightOrange,
+                            verticalPadding = 4.dp,
+                            meaningColor = MaterialTheme.colorScheme.onSurface,
+                            onSpeak = { onSpeakWord(w.word) },
+                        )
                     }
                 } else {
                     Text("（本句为单词/短语卡，见上）", fontSize = 12.sp, color = Muted)

@@ -10,6 +10,9 @@ import com.readlet.app.data.Settings
 import com.readlet.app.data.db.Card
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.data.db.WordFreq
+import com.readlet.app.tts.SpeakKind
+import com.readlet.app.tts.TtsManager
+import com.readlet.app.tts.TtsState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -70,6 +73,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = (app as ReadletApp).repository
     private val settings = (app as ReadletApp).settings
+    private val tts = (app as ReadletApp).tts
 
     // ---------- 页面状态 ----------
     private val _tab = MutableStateFlow(Tab.Library)
@@ -159,6 +163,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val detailWord = MutableStateFlow<String?>(null)
     val settingsOpen = MutableStateFlow(false)
 
+    /** 发音设置子对话框门（主设置内「发音设置…」打开，叠在主设置之上）。 */
+    val voiceSettingsOpen = MutableStateFlow(false)
+
     /** 正在被手动重新分析的卡片 id：防重复点击（同一张卡分析中则忽略后续点击）。 */
     private val _detailAnalyzing = MutableStateFlow<Set<Long>>(emptySet())
     val detailAnalyzing: StateFlow<Set<Long>> = _detailAnalyzing
@@ -174,7 +181,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     )
     val settingsState: StateFlow<SettingsState> = _settingsState
 
+    /** 发音子系统访问入口（设置对话框与播放按钮共用）。 */
+    val ttsManager: TtsManager get() = tts
+    val ttsState: StateFlow<TtsState> = tts.state
+
     init {
+        // 发音子系统：同步引擎选择与语音包就绪态（设置持久化在 ReadletApp 单例上）。
+        tts.refreshSettings(settings.voiceEngine, settings.voiceId)
         viewModelScope.launch {
             combine(repo.observeCards(), analysisTick) { cards, _ -> cards }
                 .collect { cards ->
@@ -400,6 +413,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 repo.importBackup(uri)
                 repo.refreshClient()
                 _settingsState.value = SettingsState(settings.apiKey, settings.baseUrl, settings.model, settings.glossary)
+                tts.refreshSettings(settings.voiceEngine, settings.voiceId)
                 analysisTick.value++
                 statsTick.value++
                 refreshDue()
@@ -414,6 +428,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun showToast(msg: String) {
         _toast.value = ToastMsg(msg)
     }
+
+    // ---------- 发音 ----------
+
+    fun openVoiceSettings() {
+        voiceSettingsOpen.value = true
+    }
+
+    fun closeVoiceSettings() {
+        voiceSettingsOpen.value = false
+    }
+
+    /** 播放一段发音（词/短语）；本地引擎未就绪自动回退系统语音并提示一次（引擎/音色变更后重置）。 */
+    fun playPronunciation(text: String) {
+        viewModelScope.launch {
+            when (tts.speak(text)) {
+                SpeakKind.FALLBACK_SYSTEM -> {
+                    if (!fallbackNotified) {
+                        fallbackNotified = true
+                        showToast("本地语音未就绪，已用系统语音播放")
+                    }
+                }
+                SpeakKind.FAILED -> showToast("发音失败：语音引擎不可用")
+                else -> Unit
+            }
+        }
+    }
+
+    /** 离开页面/翻卡时停止发音。 */
+    fun stopPronunciation() {
+        tts.stopPlayback()
+    }
+
+    /** 引擎/音色即时生效（直接写 Settings 并刷新 TtsManager；发音设置无「保存」制）。 */
+    fun setVoiceEngine(engineId: String, voiceId: String) {
+        settings.voiceEngine = engineId
+        settings.voiceId = voiceId
+        tts.refreshSettings(engineId, voiceId)
+        fallbackNotified = false
+    }
+
+    fun startVoicePackDownload() = tts.startDownload()
+
+    fun cancelVoicePackDownload() = tts.cancelDownload()
+
+    fun deleteVoicePack() = tts.deletePack()
+
+    /** 回退提示会话内只弹一次；引擎/音色变更后重置。 */
+    private var fallbackNotified = false
 
     /** 左滑删除卡片（词表级联删除），snackbar 可撤销。 */
     fun deleteCard(cardId: Long) {

@@ -8,7 +8,7 @@ plugins {
 }
 
 // 版本单一来源：versionName 与 APK 产物名共用
-val appVersionName = "0.5.0"
+val appVersionName = "0.6.0"
 
 // 发布签名：keystore.properties 不入库，缺失时 release 产出未签名 APK
 val keystorePropsFile = rootProject.file("keystore.properties")
@@ -25,8 +25,12 @@ android {
         applicationId = "com.readlet.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
+        versionCode = 13
         versionName = appVersionName
+        // 本地发音引擎（sherpa-onnx）仅打包 arm64-v8a：2020 后实机全覆盖；x86_64 模拟器不支持为已知限制。
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     // APK 命名规范：Readlet-v<versionName>-<variant>.apk
@@ -81,6 +85,10 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.coroutines.android)
+    // sherpa-onnx 官方预编译 AAR（v1.13.7，sha256 c4ef49e3…73c8，本地 libs/ 目录入库）：含 JNI .so 与 Kotlin API
+    implementation(files("libs/sherpa-onnx-1.13.7.aar"))
+    // 语音包 tar.bz2 解压（纯 Java，流式）
+    implementation(libs.commons.compress)
     testImplementation(libs.junit)
     // org.json 在 JVM 单测中需要真实实现（Android SDK 的为空壳）
     testImplementation("org.json:json:20240303")
