@@ -276,12 +276,23 @@ fun KeywordRow(
     verticalPadding: Dp = 5.dp,
     meaningColor: Color = Color.Unspecified,
     onSpeak: (() -> Unit)? = null,
+    onEtymology: (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = verticalPadding)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(word, fontSize = wordFontSize, fontWeight = FontWeight.Bold, color = wordColor)
             pos?.let {
                 Text(it, fontSize = 12.sp, color = Blue, modifier = Modifier.padding(start = 6.dp))
+            }
+            onEtymology?.let {
+                Text(
+                    "词源 ›",
+                    fontSize = 12.sp,
+                    color = Blue,
+                    modifier = Modifier.padding(start = 8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { it() },
+                )
             }
             if (onSpeak != null) {
                 Spacer(Modifier.weight(1f))

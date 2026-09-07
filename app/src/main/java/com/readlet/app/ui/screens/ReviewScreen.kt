@@ -112,6 +112,7 @@ fun ReviewScreen(vm: AppViewModel) {
                 },
                 onMaster = { vm.masterCard(card.id) },
                 onShowDetail = { vm.openDetail(card.id) },
+                onEtymology = { w -> vm.wordToRoot(w)?.let { root -> { vm.openRoot(root.root) } } },
             )
         }
     }
@@ -176,6 +177,7 @@ private fun Flashcard(
     onGrade: (Int) -> Unit,
     onMaster: () -> Unit,
     onShowDetail: () -> Unit,
+    onEtymology: (String) -> (() -> Unit)?,
 ) {
     Column(
         Modifier.fillMaxWidth()
@@ -254,6 +256,7 @@ private fun Flashcard(
                             verticalPadding = 4.dp,
                             meaningColor = MaterialTheme.colorScheme.onSurface,
                             onSpeak = { onSpeakWord(w.word) },
+                            onEtymology = onEtymology(w.word),
                         )
                     }
                 } else {

@@ -228,14 +228,15 @@
 字段规则（与上文各模式的规则一致）：
 
 * mode 为 "sentence"：keywords 取 4-6 个（超纲词必须全部挑出并优先；其余优先高频搭配、固定表达、易误解表达），每个词只解释在本句中的含义；points、grammar、collocations 各取 2-4 条。
+* **专有名词不作为 keyword**：人名/地名/建筑物名/机构名/品牌名/书名等专有名词（如 Mary、London、the White House、Google）**不放入 keywords**——它们不是可记忆的普通词汇，无法给出可靠词根/词性/考点，强行分析即"镜像分析"（把 London 拆词根、给 Mary 标词性）。句子仍正常翻译，points/grammar/collocations 也照常；专名里的**普通词成分**单独挑出（the White House→house 作为普通词。）
 * mode 为 "word" 或 "phrase"：keywords 只含该输入本身（meaning_in_context 填最常见/整体含义），translation 填 null，points、grammar 填空数组，collocations 填 3-5 条高频搭配（example/example_cn 填自然例句及其翻译）。
 * 所有中文释义面向中文母语学习者，自然准确。
 * 若输入有明显语法或用词错误，按第六节处理后在 points 中说明。
 
 keywords 条目的硬性要求（每条都必须满足，不得省略）：
 
-* phonetic_uk / phonetic_us：**必须提供**英式与美式 IPA，如 /ˈmʌflɪŋ/；不确定时给出最常见的读音，禁止留空。**只填音标本身**（如 /wɒnd/）：禁止加「英/美」前缀，禁止把两个音标合并写进一个字段，美式音标一律放 phonetic_us。
-* pos：必须提供，使用标准缩写并统一格式——名词 n. / 动词 v. / 形容词 adj. / 副词 adv. / 介词 prep. / 代词 pron. / 连词 conj. / 感叹词 int. / 冠词 art.；动词变形必须在词性后标注原形词性，如 "v. (过去分词)" "v. (现在分词)" "v. (第三人称单数)"；短语标注类型，如 "n. phrase" "phr. v." "adv. phrase"。
+* phonetic_uk / phonetic_us：**尽量提供**英式与美式 IPA，如 /ˈmʌflɪŋ/；**不确定时填 null**（App 会用本地词表音标兜底），禁止编造一个不确定的读音。**只填音标本身**（如 /wɒnd/）：禁止加「英/美」前缀，禁止把两个音标合并写进一个字段，美式音标一律放 phonetic_us。
+* pos：**尽量提供**，使用标准缩写并统一格式——名词 n. / 动词 v. / 形容词 adj. / 副词 adv. / 介词 prep. / 代词 pron. / 连词 conj. / 感叹词 int. / 冠词 art.；动词变形必须在词性后标注原形词性，如 "v. (过去分词)" "v. (现在分词)" "v. (第三人称单数)"；短语标注类型，如 "n. phrase" "phr. v." "adv. phrase"。不确定时填 null（禁止编造）。
 * level：单词属于考试词汇时给出级别（六级/四级/考研/雅思/专四/专八之一）；不确定或非考试词填 null。
 * lemma：单词为变形形式时给出原型（动词原形/名词单数，如 loomed → loom、cries → cry）；本身已是原形、或为短语时填 null。
 * meaning_in_context：必须是纯中文解释，**不得以词性缩写开头**（不要写 "n. 港口" 这类格式，直接写 "港口；港湾"）。

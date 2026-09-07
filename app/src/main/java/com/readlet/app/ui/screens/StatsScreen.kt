@@ -67,15 +67,18 @@ fun StatsScreen(vm: AppViewModel) {
         Heatmap(weeks, vm.heatmapMonths(), vm.heatmapToday())
         SectionTitle("近 30 天复习量")
         LineChart(recent.map { it.second.toFloat() }, label = { i -> vm.formatDay(recent[i].first) })
-        SectionTitle("高频难点词 · 按出现频率")
-        if (stats.wordFreq.isEmpty()) {
-            Text("分析句子后，这里会汇总反复出现的高频难点词。", fontSize = 13.sp, color = Muted)
-        } else {
-            // 高频难点词只显示前 10。
-            stats.wordFreq.take(10).forEach { f ->
-                WordRow(f.word, "出现 ${f.freq} 次 · ${f.cards} 句") { vm.openWord(f.word) }
-            }
-        }
+        SectionTitle("高频难点词")
+        StatsLinkRow(
+            title = "高频难点词 · 按出现频率",
+            subtitle = if (stats.wordFreq.isEmpty()) "分析句子后，这里会汇总反复出现的高频难点词。" else "共 ${stats.wordFreq.size} 个",
+            onClick = { vm.openDifficultyWords() },
+        )
+        SectionTitle("词根库")
+        StatsLinkRow(
+            title = "词根库 · 按词族规模",
+            subtitle = "共 ${vm.roots.allRoots().size} 个词根",
+            onClick = { vm.openRootLibrary() },
+        )
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -297,28 +300,21 @@ private fun LineChart(values: List<Float>, label: (Int) -> String) {
         }
 }
 
-/** 难点词行：词独占一行（超长截断），频率信息在下方，避免长词组把行撑开留大片空白。 */
+/** 统计页 `>` 入口行：标题 + 副标题（计数/说明）+ 右侧箭头，点进对应分页列表页。 */
 @Composable
-private fun WordRow(word: String, meta: String, onClick: () -> Unit) {
+private fun StatsLinkRow(title: String, subtitle: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
+        Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
-                word,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Green,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(meta, fontSize = 12.sp, color = Muted, modifier = Modifier.padding(top = 2.dp))
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Green)
+            if (subtitle.isNotEmpty()) Text(subtitle, fontSize = 12.sp, color = Muted, modifier = Modifier.padding(top = 2.dp))
         }
-        Text("›", fontSize = 18.sp, color = Muted, modifier = Modifier.padding(start = 8.dp))
+        Text("›", fontSize = 20.sp, color = Muted, modifier = Modifier.padding(start = 8.dp))
     }
 }

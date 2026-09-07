@@ -197,4 +197,19 @@ class AnalysisParserTest {
         val raw = """{"mode":"sentence","translation":"t","keywords":[{"word":"x"}],"points":[],"grammar":[],"collocations":[]}"""
         assertNull(AnalysisParser.parse(raw).keywords[0].affix)
     }
+
+    @Test
+    fun `uncertain static fields parse to null not fabricated`() {
+        val raw = """
+            {"mode":"sentence","translation":"t",
+             "keywords":[{"word":"x","phonetic_uk":null,"phonetic_us":null,"pos":null,"level":null,"lemma":null,"meaning_in_context":"m"}],
+             "points":[],"grammar":[],"collocations":[]}
+        """.trimIndent()
+        val k = AnalysisParser.parse(raw).keywords[0]
+        assertNull(k.phoneticUk)
+        assertNull(k.phoneticUs)
+        assertNull(k.pos)
+        assertNull(k.level)
+        assertNull(k.lemma)
+    }
 }

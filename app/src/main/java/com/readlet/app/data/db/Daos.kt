@@ -3,6 +3,7 @@ package com.readlet.app.data.db
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -172,4 +173,28 @@ interface LlmUsageDao {
     /** 累计 token 用量。 */
     @Query("SELECT COALESCE(SUM(totalTokens), 0) FROM llm_usage")
     fun observeTotalTokens(): Flow<Int>
+}
+
+@Dao
+interface LexiconDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<Lexicon>)
+
+    @Query("SELECT * FROM lexicon WHERE word = :word")
+    suspend fun byWord(word: String): Lexicon?
+
+    @Query("SELECT COUNT(*) FROM lexicon")
+    suspend fun count(): Int
+}
+
+@Dao
+interface RootEtymologyDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: RootEtymology)
+
+    @Query("SELECT * FROM root_etymology WHERE root = :root")
+    suspend fun byRoot(root: String): RootEtymology?
+
+    @Query("SELECT COUNT(*) FROM root_etymology")
+    suspend fun count(): Int
 }

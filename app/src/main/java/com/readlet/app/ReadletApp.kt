@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import com.readlet.app.data.Settings
+import com.readlet.app.data.Roots
 import com.readlet.app.data.WordLevels
 import com.readlet.app.data.db.AppDatabase
 import com.readlet.app.data.repo.CardRepository
@@ -21,6 +22,8 @@ class ReadletApp : Application() {
         private set
     lateinit var wordLevels: WordLevels
         private set
+    lateinit var roots: Roots
+        private set
     lateinit var repository: CardRepository
         private set
     lateinit var tts: TtsManager
@@ -34,7 +37,8 @@ class ReadletApp : Application() {
         db = AppDatabase.build(this)
         settings = Settings(this)
         wordLevels = WordLevels.load(this)
-        repository = CardRepository(this, db, settings, wordLevels)
+        roots = Roots.load(this)
+        repository = CardRepository(this, db, settings, wordLevels, roots, appScope)
         // 发音子系统单例：懒加载引擎/语音包，随进程存续。
         tts = TtsManager(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

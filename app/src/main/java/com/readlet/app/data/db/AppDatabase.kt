@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Card::class, CardWord::class, ReviewLog::class, LlmUsage::class],
-    version = 7,
+    entities = [Card::class, CardWord::class, ReviewLog::class, LlmUsage::class, Lexicon::class, RootEtymology::class],
+    version = 9,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -17,6 +17,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cardWordDao(): CardWordDao
     abstract fun reviewLogDao(): ReviewLogDao
     abstract fun llmUsageDao(): LlmUsageDao
+    abstract fun lexiconDao(): LexiconDao
+    abstract fun rootEtymologyDao(): RootEtymologyDao
 
     companion object {
         /** v1 → v2：cards 表新增 mastered 列（已掌握标记）。 */
@@ -77,10 +79,32 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE card_words ADD COLUMN affix TEXT")
             }
         }
+        /** v7 → v8：新增 lexicon（词/词组知识库）与 root_etymology（词源库）。 */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `lexicon` (" +
+                        "`word` TEXT NOT NULL PRIMARY KEY, `surface` TEXT NOT NULL, " +
+                        "`phonetic` TEXT, `phoneticUs` TEXT, `pos` TEXT, `meaning` TEXT, `lemma` TEXT, " +
+                        "`affix` TEXT, `root` TEXT, `level` TEXT, `updatedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `root_etymology` (" +
+                        "`root` TEXT NOT NULL PRIMARY KEY, `meaning` TEXT, `origin` TEXT, " +
+                        "`itemsJson` TEXT, `updatedAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+        /** v8 → v9：root_etymology 新增 promptVersion 列（词源 prompt 变更时据此重生成缓存）。 */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE root_etymology ADD COLUMN promptVersion INTEGER NOT NULL DEFAULT 0")
+            }
+        }
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "readlet.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
     }
 }

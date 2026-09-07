@@ -6,10 +6,13 @@ import androidx.lifecycle.AndroidViewModel
 import com.readlet.app.ShareFeedback
 import androidx.lifecycle.viewModelScope
 import com.readlet.app.ReadletApp
+import com.readlet.app.data.Roots
 import com.readlet.app.data.Settings
 import com.readlet.app.data.db.Card
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.data.db.WordFreq
+import com.readlet.app.llm.EtymologyItem
+import com.readlet.app.llm.EtymologyResult
 import com.readlet.app.tts.SpeakKind
 import com.readlet.app.tts.TtsManager
 import com.readlet.app.tts.TtsState
@@ -68,6 +71,17 @@ data class ToastMsg(val text: String, val undo: Boolean = false)
 
 /** 一键分析批量进度；非 null 期间按钮显示「分析中 done/total」且不可点击。 */
 data class AnalyzeProgress(val total: Int, val done: Int)
+
+/** 全屏覆盖页（导航栈元素）。栈顶 = 当前最上层覆盖页，返回键始终关栈顶。
+ * 用栈而非若干独立 bool：card→rootPage、rootPage→word、word→card 三链需要不同的顶层，
+ * 静态 BackHandler 顺序无法兼顾，栈后进先出天然正确。 */
+sealed interface Overlay {
+    data class CardDetail(val cardId: Long) : Overlay
+    data class WordDetail(val word: String) : Overlay
+    data class RootPage(val root: String) : Overlay
+    object DifficultyWords : Overlay
+    object RootLibrary : Overlay
+}
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -158,9 +172,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _stats = MutableStateFlow(StatsData())
     val stats: StateFlow<StatsData> = _stats
 
-    // ---------- 覆盖页 ----------
-    val detailCardId = MutableStateFlow<Long?>(null)
-    val detailWord = MutableStateFlow<String?>(null)
+    // ---------- 覆盖页栈 ----------
+    private val _overlays = MutableStateFlow<List<Overlay>>(emptyList())
+    val overlays: StateFlow<List<Overlay>> = _overlays
+
     val settingsOpen = MutableStateFlow(false)
 
     /** 发音设置子对话框门（主设置内「发音设置…」打开，叠在主设置之上）。 */
@@ -271,21 +286,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openDetail(cardId: Long) {
-        detailCardId.value = cardId
+        push(Overlay.CardDetail(cardId))
     }
 
     fun closeDetail() {
-        detailCardId.value = null
+        popIf { it is Overlay.CardDetail }
     }
 
     fun openWord(word: String) {
-        detailWord.value = word
+        push(Overlay.WordDetail(word))
     }
 
     fun closeWord() {
-        detailWord.value = null
+        popIf { it is Overlay.WordDetail }
         _practiceWord.value = null
         practiceQueue.value = emptyList()
+    }
+
+    fun openRoot(root: String) {
+        push(Overlay.RootPage(root))
+    }
+
+    fun closeRoot() {
+        popIf { it is Overlay.RootPage }
+    }
+
+    fun openDifficultyWords() {
+        push(Overlay.DifficultyWords)
+    }
+
+    fun closeDifficultyWords() {
+        popIf { it is Overlay.DifficultyWords }
+    }
+
+    fun openRootLibrary() {
+        push(Overlay.RootLibrary)
+    }
+
+    fun closeRootLibrary() {
+        popIf { it is Overlay.RootLibrary }
+    }
+
+    /** 卡片详情原地换卡（「开始学习」连播下一张）：替换栈顶卡片 id，不新增一层。 */
+    fun replaceCardDetail(cardId: Long) {
+        val s = _overlays.value
+        if (s.isNotEmpty() && s.last() is Overlay.CardDetail) {
+            _overlays.value = s.dropLast(1) + Overlay.CardDetail(cardId)
+        } else {
+            push(Overlay.CardDetail(cardId))
+        }
+    }
+
+    private fun push(o: Overlay) {
+        _overlays.value = _overlays.value + o
+    }
+
+    private fun popIf(pred: (Overlay) -> Boolean) {
+        val s = _overlays.value
+        if (s.isNotEmpty() && pred(s.last())) _overlays.value = s.dropLast(1)
     }
 
     /** 词频 → 加练：载入包含该词的所有句子。 */
@@ -351,7 +409,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (tab.value == Tab.Library) {
                 val next = repo.nextUnlearned(cardId)
                 if (next != null) {
-                    detailCardId.value = next.id
+                    replaceCardDetail(next.id)
                 } else {
                     closeDetail()
                     showToast("已加入复习，明天起进入复习排程；待学习卡片已全部学完 🎉")
@@ -517,6 +575,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun loadWords(cardId: Long): List<CardWord> = repo.wordsOfCard(cardId)
     suspend fun loadCardsByWord(word: String): List<Card> = repo.cardsByWord(word)
     suspend fun loadWordFreq(): List<WordFreq> = repo.wordFreq()
+
+    /** 词根词源数据（词根页/词根库共用）。 */
+    val roots: Roots get() = (getApplication() as ReadletApp).roots
+
+    /** 词源入口：surface 关键词命中词根，否则回退变形原形（inflected 词根词如 transported→transport）。 */
+    fun wordToRoot(word: String): Roots.RootEntry? {
+        val direct = roots.rootOf(word)
+        if (direct != null) return direct
+        return repo.lemmaOf(word)?.let { roots.rootOf(it) }
+    }
+
+    /** 词表释义词性记号（n./v./adj.…），清理兜底释义用。 */
+    private val POS_TOKEN = Regex("(?:n|v|adj|adv|prep|pron|conj|int)\\.\\s*")
+
+    /** 词在本地词表的释义（剥离词性前缀与游离词性记号，取首义项并限长，作词根页词族词兜底）；未收录返回 null。 */
+    fun dictionaryGloss(word: String): String? {
+        val raw = repo.dictionaryMeaning(word) ?: return null
+        val cleaned = Keywords.splitPos(raw).second
+            .replace(POS_TOKEN, "")
+            .substringBefore('；').substringBefore(',').trim()
+        return if (cleaned.isBlank()) null else cleaned.take(20)
+    }
+
+    /** 词族词命中用户词库的集合（含 surface 与变形原形键 → 出现次数），供词根页「你见过 N 次」。 */
+    suspend fun loadSeenCounts(): Map<String, Int> {
+        val freq = repo.wordFreq()
+        val map = HashMap<String, Int>()
+        for (f in freq) {
+            map.putIfAbsent(f.word.lowercase(), f.freq)
+            repo.lemmaOf(f.word)?.lowercase()?.let { map.putIfAbsent(it, f.freq) }
+        }
+        return map
+    }
+
+    /** 词源库已缓存的词族条目（词根页优先读）；未生成/为空返回 null。 */
+    suspend fun loadEtymologyItems(root: String): List<EtymologyItem>? = repo.loadEtymologyItems(root)
+
+    /** 生成并落地某词根词源（幂等）；失败返回 null（词根页回退本地拆解）。 */
+    suspend fun ensureEtymology(root: String): EtymologyResult? = repo.ensureEtymology(root)
 
     fun decodePairs(json: String?): List<Pair<String, String>> {
         if (json.isNullOrBlank()) return emptyList()

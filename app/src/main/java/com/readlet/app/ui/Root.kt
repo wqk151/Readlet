@@ -38,13 +38,15 @@ import com.readlet.app.ui.screens.SettingsDialog
 import com.readlet.app.ui.screens.VoiceSettingsDialog
 import com.readlet.app.ui.screens.StatsScreen
 import com.readlet.app.ui.screens.WordDetailScreen
+import com.readlet.app.ui.screens.WordRootScreen
+import com.readlet.app.ui.screens.DifficultyWordsScreen
+import com.readlet.app.ui.screens.RootsLibraryScreen
 
 /** 应用根：Scaffold + 底部导航 + 全屏覆盖页 + 返回键栈。 */
 @Composable
 fun Root(vm: AppViewModel) {
     val tab by vm.tab.collectAsStateWithLifecycle()
-    val detailCardId by vm.detailCardId.collectAsStateWithLifecycle()
-    val detailWord by vm.detailWord.collectAsStateWithLifecycle()
+    val overlays by vm.overlays.collectAsStateWithLifecycle()
     val settingsOpen by vm.settingsOpen.collectAsStateWithLifecycle()
     val voiceSettingsOpen by vm.voiceSettingsOpen.collectAsStateWithLifecycle()
     val toast by vm.toast.collectAsStateWithLifecycle()
@@ -62,11 +64,18 @@ fun Root(vm: AppViewModel) {
         }
     }
 
-    // 返回键优先级：发音设置 > 设置 > 词频详情 > 卡片详情
+    // 返回键：对话框最上；覆盖页栈只关栈顶（后进先出，解决 card→rootPage、rootPage→word、word→card 的循环）。
     BackHandler(enabled = voiceSettingsOpen) { vm.closeVoiceSettings() }
     BackHandler(enabled = settingsOpen) { vm.settingsOpen.value = false }
-    BackHandler(enabled = detailWord != null) { vm.closeWord() }
-    BackHandler(enabled = detailCardId != null) { vm.closeDetail() }
+    BackHandler(enabled = overlays.isNotEmpty()) {
+        when (val top = overlays.last()) {
+            is Overlay.CardDetail -> vm.closeDetail()
+            is Overlay.WordDetail -> vm.closeWord()
+            is Overlay.RootPage -> vm.closeRoot()
+            Overlay.DifficultyWords -> vm.closeDifficultyWords()
+            Overlay.RootLibrary -> vm.closeRootLibrary()
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -82,9 +91,15 @@ fun Root(vm: AppViewModel) {
             }
         }
 
-        // 详情页/设置覆盖全屏，返回文案按进入时的 Tab 区分（覆盖层在导航之上，Tab 不会中途变化）。
-        detailCardId?.let { CardDetailScreen(vm, it, backLabelFor(tab)) }
-        detailWord?.let { WordDetailScreen(vm, it) }
+        // 覆盖页：只渲染栈顶（被盖住的下一层在关闭栈顶后经重组恢复），返回文案按进入时的 Tab 区分。
+        when (val top = overlays.lastOrNull()) {
+            is Overlay.CardDetail -> CardDetailScreen(vm, top.cardId, backLabelFor(tab))
+            is Overlay.WordDetail -> WordDetailScreen(vm, top.word)
+            is Overlay.RootPage -> WordRootScreen(vm, top.root)
+            Overlay.DifficultyWords -> DifficultyWordsScreen(vm)
+            Overlay.RootLibrary -> RootsLibraryScreen(vm)
+            null -> {}
+        }
         if (settingsOpen) SettingsDialog(vm)
         // 发音设置由主设置入口打开，叠在其上（两个 AlertDialog 同屏允许）。
         if (voiceSettingsOpen) VoiceSettingsDialog(vm)

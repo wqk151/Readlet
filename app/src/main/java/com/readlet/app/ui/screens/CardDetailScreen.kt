@@ -150,6 +150,7 @@ fun CardDetailScreen(vm: AppViewModel, cardId: Long, backLabel: String = "â† è¿
                                 lemma = w.lemma ?: remember(w) { vm.lemmaOf(w.word) },
                                 affix = w.affix,
                                 onSpeak = { vm.playPronunciation(w.word) },
+                                onEtymology = vm.wordToRoot(w.word)?.let { root -> { vm.openRoot(root.root) } },
                             )
                         }
                     }

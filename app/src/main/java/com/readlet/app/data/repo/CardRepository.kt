@@ -7,6 +7,7 @@ import android.net.Uri
 import android.util.Xml
 import androidx.room.withTransaction
 import com.readlet.app.data.Settings
+import com.readlet.app.data.Roots
 import com.readlet.app.data.WordLevels
 import com.readlet.app.data.db.AppDatabase
 import com.readlet.app.data.db.Card
@@ -14,22 +15,30 @@ import com.readlet.app.data.db.CardReviewCount
 import com.readlet.app.data.db.CardStatus
 import com.readlet.app.data.db.CardWord
 import com.readlet.app.data.db.DailyCount
+import com.readlet.app.data.db.Lexicon
 import com.readlet.app.data.db.LlmUsage
 import com.readlet.app.data.db.ReviewLog
 import com.readlet.app.data.db.ReviewType
+import com.readlet.app.data.db.RootEtymology
 import com.readlet.app.data.db.WordFreq
 import com.readlet.app.data.srs.Sm2
 import com.readlet.app.llm.AnalyzePrompt
 import com.readlet.app.llm.AnalysisParser
 import com.readlet.app.llm.AnalyzeResult
+import com.readlet.app.llm.EtymologyParser
+import com.readlet.app.llm.EtymologyPrompt
+import com.readlet.app.llm.EtymologyItem
+import com.readlet.app.llm.EtymologyResult
 import com.readlet.app.llm.LlmClient
 import com.readlet.app.llm.LlmException
 import com.readlet.app.ui.Keywords
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
@@ -57,11 +66,15 @@ class CardRepository(
     private val db: AppDatabase,
     private val settings: Settings,
     private val wordLevels: WordLevels,
+    private val roots: Roots,
+    private val scope: CoroutineScope,
 ) {
     private val cardDao = db.cardDao()
     private val wordDao = db.cardWordDao()
     private val logDao = db.reviewLogDao()
     private val llmDao = db.llmUsageDao()
+    private val lexiconDao = db.lexiconDao()
+    private val rootEtymologyDao = db.rootEtymologyDao()
 
     var llmClient: LlmClient = buildClient()
         private set
@@ -239,7 +252,11 @@ class CardRepository(
                     // 重新分析时旧词标注一并重建，防止累积重复。
                     wordDao.deleteByCard(cardId)
                     if (words.isNotEmpty()) wordDao.insertAll(words)
+                    // 词/词组知识库（支持库）随分析累积落地（同词 upsert，跨卡聚合）。
+                    if (words.isNotEmpty()) lexiconDao.upsertAll(words.map { toLexicon(it) })
                 }
+                // 词源分析随语句分析：命中词根的关键词触发词源生成（异步、按词根去重、不阻塞分析完成）。
+                scope.launch(Dispatchers.IO) { triggerEtymologyFor(words.map { it.word }) }
                 return
             } catch (e: LlmException) {
                 lastError = e
@@ -282,25 +299,31 @@ class CardRepository(
                 } else {
                     null to rawMeaning
                 }
+                // 源可信分层（Q5=A）：静态事实字段（音标/词性/级别/原型/构词）本地可信数据优先，
+                // LLM 仅在本地无数据时兜底；本地无且 LLM 也没给/不确定 → 缺省不显示，绝不编造。
+                val entryPos = entry?.takeUnless { homograph }?.meaning
+                    ?.takeIf { it.isNotBlank() }?.let { Keywords.splitPos(it).first }
                 words.add(
                     CardWord(
                         cardId = card.id,
                         word = part,
-                        // 各元素 LLM 优先、词表兜底、再无则 null（UI 不显示）。
-                        // 音标分英/美两列：LLM 缺时词表双音标兜底（英/美各查，含变形原形回退）；
+                        // 音标分英/美两列：本地词表优先（含变形原形回退），LLM 仅兜底。
                         // phoneticOf 跳过词表空音标词条继续查变形原形（crouched → crouch）。
-                        phonetic = k.phoneticUk?.takeIf { it.isNotBlank() }
-                            ?: wordLevels.phoneticOf(part),
-                        phoneticUs = k.phoneticUs?.takeIf { it.isNotBlank() }
-                            ?: wordLevels.phoneticUsOf(part),
-                        pos = if (!k.pos.isNullOrBlank()) k.pos else posFromMeaning,
+                        phonetic = wordLevels.phoneticOf(part)
+                            ?: k.phoneticUk?.takeIf { it.isNotBlank() },
+                        phoneticUs = wordLevels.phoneticUsOf(part)
+                            ?: k.phoneticUs?.takeIf { it.isNotBlank() },
+                        pos = entryPos ?: (if (!k.pos.isNullOrBlank()) k.pos else posFromMeaning),
                         meaningInContext = meaning,
                         orderIdx = idx++,
-                        level = k.level?.takeIf { it.isNotBlank() }
-                            ?: entry?.takeUnless { homograph }?.level?.takeIf { it.isNotEmpty() },
-                        lemma = k.lemma?.takeIf { it.isNotBlank() }
-                            ?: wordLevels.lemma(part),
-                        affix = encode(k.affix?.map { listOf(it.part, it.type.orEmpty(), it.meaning.orEmpty()) }.orEmpty()),
+                        level = entry?.takeUnless { homograph }?.level?.takeIf { it.isNotEmpty() }
+                            ?: k.level?.takeIf { it.isNotBlank() },
+                        lemma = wordLevels.lemma(part)
+                            ?: k.lemma?.takeIf { it.isNotBlank() },
+                        // 构词：本地词根数据集优先（确定性拆解），LLM 兜底（受 prompt「不确定→null 禁止编造」约束）。
+                        affix = roots.breakdownOf(part)?.let { aff ->
+                            encode(aff.map { listOf(it.part, it.type, it.meaning) })
+                        } ?: encode(k.affix?.map { listOf(it.part, it.type.orEmpty(), it.meaning.orEmpty()) }.orEmpty()),
                     )
                 )
             }
@@ -617,6 +640,98 @@ class CardRepository(
 
     /** 词的原形（词表变形还原，内存查表）；原形/未命中返回 null。 */
     fun lemmaOf(word: String): String? = wordLevels.lemma(word)
+
+    /** 词在本地词表的释义（词典义，供词根页词族词兜底展示）；未收录返回 null。 */
+    fun dictionaryMeaning(word: String): String? =
+        wordLevels.lookup(word)?.meaning?.takeIf { it.isNotBlank() }
+
+    // ---------- 词源/词库 ----------
+
+    /** 词/词组知识库条目：从 CardWord 派生（词根由本地词根数据集判定）。 */
+    private fun toLexicon(cw: CardWord): Lexicon {
+        val root = roots.rootOf(cw.word)?.root ?: cw.lemma?.let { roots.rootOf(it)?.root }
+        return Lexicon(
+            word = cw.word.lowercase(),
+            surface = cw.word,
+            phonetic = cw.phonetic,
+            phoneticUs = cw.phoneticUs,
+            pos = cw.pos,
+            meaning = cw.meaningInContext,
+            lemma = cw.lemma,
+            affix = cw.affix,
+            root = root,
+            level = cw.level,
+        )
+    }
+
+    /** 词源库读取（词根页优先读这里；未生成返回 null）。 */
+    suspend fun rootEtymology(root: String): RootEtymology? = rootEtymologyDao.byRoot(root)
+
+    /** 词源库已缓存的词族条目（仅当前版本 prompt 生成的才视为有效）；未生成/为空/旧版返回 null。 */
+    suspend fun loadEtymologyItems(root: String): List<EtymologyItem>? {
+        val cached = rootEtymologyDao.byRoot(root) ?: return null
+        if (cached.promptVersion < EtymologyPrompt.VERSION) return null // 旧 prompt 生成 → 触发重新生成
+        return EtymologyParser.decodeItems(cached.itemsJson).takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * 生成并落地某词根的词源（幂等：已有缓存则直接复用）。仅当本地词根数据集收录该词根才生成。
+     * @return 生成的词源；失败/未收录返回 null（调用方回退本地拆解）。
+     */
+    suspend fun ensureEtymology(root: String): EtymologyResult? {
+        // 已有缓存且由当前版本 prompt 生成（非空）则直接复用；否则重新生成。
+        val cached = rootEtymologyDao.byRoot(root)
+        val fresh = cached?.let {
+            it.promptVersion >= EtymologyPrompt.VERSION && EtymologyParser.decodeItems(it.itemsJson).isNotEmpty()
+        } == true
+        if (fresh) {
+            return EtymologyResult(root, cached.meaning, cached.origin, EtymologyParser.decodeItems(cached.itemsJson))
+        }
+        val localRoot = roots.byRoot(root) ?: return null
+        return try {
+            val resp = llmClient.analyze(
+                EtymologyPrompt.system(context),
+                EtymologyPrompt.request(root, localRoot.meaning, localRoot.origin, localRoot.family),
+            )
+            llmDao.insert(
+                LlmUsage(
+                    promptTokens = resp.promptTokens,
+                    completionTokens = resp.completionTokens,
+                    totalTokens = resp.promptTokens + resp.completionTokens,
+                )
+            )
+            val result = EtymologyParser.parse(resp.content)
+            val items = result.items
+            val meaning = result.meaning ?: localRoot.meaning
+            val origin = result.origin ?: localRoot.origin
+            rootEtymologyDao.upsert(
+                RootEtymology(
+                    root = root,
+                    meaning = meaning,
+                    origin = origin,
+                    itemsJson = EtymologyParser.encodeItems(items),
+                    promptVersion = EtymologyPrompt.VERSION,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+            result.copy(root = root, meaning = meaning, origin = origin)
+        } catch (e: LlmException) {
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** 语句分析后：对命中词根的关键词触发词源生成（按词根去重；幂等，已缓存则跳过）。词组/短语跳过。 */
+    suspend fun triggerEtymologyFor(words: List<String>) {
+        val rootsToDo = LinkedHashSet<String>()
+        for (w in words) {
+            if (w.isBlank() || w.contains(" ")) continue
+            val root = roots.rootOf(w)?.root ?: wordLevels.lemma(w)?.let { roots.rootOf(it)?.root }
+            if (root != null) rootsToDo.add(root)
+        }
+        for (r in rootsToDo) ensureEtymology(r)
+    }
 
     fun observeCards(): kotlinx.coroutines.flow.Flow<List<Card>> = cardDao.observeAll()
     fun observeCard(id: Long): kotlinx.coroutines.flow.Flow<Card?> = cardDao.observeById(id)

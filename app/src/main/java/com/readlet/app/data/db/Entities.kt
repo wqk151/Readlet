@@ -73,6 +73,33 @@ data class CardWord(
     val affix: String? = null,
 )
 
+/** 词/词组知识库（支持库，随学习扩充）：每次分析把 LLM 产出的单词/词组/音标/词性/释义/原型/词缀/词根/级别累积落地，跨卡聚合、逐步变强。 */
+@Entity(tableName = "lexicon")
+data class Lexicon(
+    @PrimaryKey val word: String,          // 规范化键（小写）
+    val surface: String,                    // 展示词形
+    val phonetic: String? = null,
+    val phoneticUs: String? = null,
+    val pos: String? = null,
+    val meaning: String? = null,
+    val lemma: String? = null,
+    val affix: String? = null,             // 构词 JSON（同 card_words）
+    val root: String? = null,              // 词根（本地词根数据集命中）
+    val level: String? = null,
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+/** 词源库：每词根一次 LLM 生成后落地（词族每词的 breakdown[part/type/中文义] + derivation 推导义），之后词根页秒读/离线可用。 */
+@Entity(tableName = "root_etymology")
+data class RootEtymology(
+    @PrimaryKey val root: String,
+    val meaning: String? = null,
+    val origin: String? = null,
+    val itemsJson: String? = null,         // [ {word, breakdown:[[part,type,meaning]...], meaning} ]
+    val promptVersion: Int = 0,            // 生成该词源所用 prompt 版本；低于当前版本则重新生成
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
 /** 复习日志：SRS 排程与统计（热力图/曲线/打卡）的数据源 */
 @Entity(
     tableName = "review_logs",
