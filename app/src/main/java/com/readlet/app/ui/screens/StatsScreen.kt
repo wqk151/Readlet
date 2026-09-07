@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.readlet.app.ui.AppViewModel
+import com.readlet.app.ui.KnowledgeDoc
 import com.readlet.app.ui.SectionTitle
 import com.readlet.app.ui.theme.Amber
 import com.readlet.app.ui.theme.Green
@@ -78,6 +79,18 @@ fun StatsScreen(vm: AppViewModel) {
             title = "词根库 · 按词族规模",
             subtitle = "共 ${vm.roots.allRoots().size} 个词根",
             onClick = { vm.openRootLibrary() },
+        )
+        SectionTitle("发音规律")
+        StatsLinkRow(
+            title = "发音规律 · 语流音变速查",
+            subtitle = "浊化/同化/连读/省音/弱读/缩读等 12 章规则速查",
+            onClick = { vm.openKnowledge(KnowledgeDoc.PRON_RULES) },
+        )
+        SectionTitle("音标")
+        StatsLinkRow(
+            title = "国际音标 · 48 个",
+            subtitle = "元音 20 + 辅音 28 · 发音技巧与样例",
+            onClick = { vm.openKnowledge(KnowledgeDoc.IPA) },
         )
         Spacer(Modifier.height(24.dp))
     }

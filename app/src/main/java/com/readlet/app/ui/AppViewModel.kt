@@ -72,6 +72,9 @@ data class ToastMsg(val text: String, val undo: Boolean = false)
 /** 一键分析批量进度；非 null 期间按钮显示「分析中 done/total」且不可点击。 */
 data class AnalyzeProgress(val total: Int, val done: Int)
 
+/** 发音知识库文档（统计页入口进入的全屏参考页）。 */
+enum class KnowledgeDoc { PRON_RULES, IPA }
+
 /** 全屏覆盖页（导航栈元素）。栈顶 = 当前最上层覆盖页，返回键始终关栈顶。
  * 用栈而非若干独立 bool：card→rootPage、rootPage→word、word→card 三链需要不同的顶层，
  * 静态 BackHandler 顺序无法兼顾，栈后进先出天然正确。 */
@@ -79,6 +82,7 @@ sealed interface Overlay {
     data class CardDetail(val cardId: Long) : Overlay
     data class WordDetail(val word: String) : Overlay
     data class RootPage(val root: String) : Overlay
+    data class Knowledge(val doc: KnowledgeDoc) : Overlay
     object DifficultyWords : Overlay
     object RootLibrary : Overlay
 }
@@ -325,6 +329,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeRootLibrary() {
         popIf { it is Overlay.RootLibrary }
+    }
+
+    fun openKnowledge(doc: KnowledgeDoc) {
+        push(Overlay.Knowledge(doc))
+    }
+
+    fun closeKnowledge() {
+        popIf { it is Overlay.Knowledge }
     }
 
     /** 卡片详情原地换卡（「开始学习」连播下一张）：替换栈顶卡片 id，不新增一层。 */

@@ -195,6 +195,10 @@ insertCard(text, source) → status=ANALYZING
 - 词频榜：`cardword` 全量拉取 → Kotlin 拆分重聚合（见 4.4），展示"出现 N 次 · M 句"
 - 图表：Compose Canvas 手绘（热力图 grid + 折线），不引图表库
 
+### 4.12 发音知识库（统计页入口）
+- 文档见 `DESIGN.md` §14。导航：`Overlay.Knowledge(KnowledgeDoc)`（Overlay 栈复用）→ `ui/screens/KnowledgeScreen.kt`。
+- 内容数据在 `ui/knowledge/`：`Kb.kt`（`KbSection`/`KbBlock` 模型 + 渲染：表格=按列权重网格 + `**…**` 加粗解析；Code 块横向滚动；Tip 提醒块）与两份数据 `PronRulesContent.kt`/`IpaContent.kt`。内容更新 = 改 Kotlin 数据 + `KnowledgeScreen.kt` 里 `pages` 映射文案（meta/intro），无 Room / assets / 网络参与。
+
 ## 5. 数据库版本
 
 | 版本 | 变更 |

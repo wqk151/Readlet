@@ -40,6 +40,7 @@ import com.readlet.app.ui.screens.StatsScreen
 import com.readlet.app.ui.screens.WordDetailScreen
 import com.readlet.app.ui.screens.WordRootScreen
 import com.readlet.app.ui.screens.DifficultyWordsScreen
+import com.readlet.app.ui.screens.KnowledgeScreen
 import com.readlet.app.ui.screens.RootsLibraryScreen
 
 /** 应用根：Scaffold + 底部导航 + 全屏覆盖页 + 返回键栈。 */
@@ -72,6 +73,7 @@ fun Root(vm: AppViewModel) {
             is Overlay.CardDetail -> vm.closeDetail()
             is Overlay.WordDetail -> vm.closeWord()
             is Overlay.RootPage -> vm.closeRoot()
+            is Overlay.Knowledge -> vm.closeKnowledge()
             Overlay.DifficultyWords -> vm.closeDifficultyWords()
             Overlay.RootLibrary -> vm.closeRootLibrary()
         }
@@ -96,6 +98,7 @@ fun Root(vm: AppViewModel) {
             is Overlay.CardDetail -> CardDetailScreen(vm, top.cardId, backLabelFor(tab))
             is Overlay.WordDetail -> WordDetailScreen(vm, top.word)
             is Overlay.RootPage -> WordRootScreen(vm, top.root)
+            is Overlay.Knowledge -> KnowledgeScreen(vm, top.doc)
             Overlay.DifficultyWords -> DifficultyWordsScreen(vm)
             Overlay.RootLibrary -> RootsLibraryScreen(vm)
             null -> {}
