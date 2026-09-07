@@ -3,7 +3,10 @@
 
 目标集合：
 - 级别词（16,241）中缺英标或美标的词（补缺路径的词全靠 CSV 音标，无 LLM 兜底）；
-- --words 显式指定词（如 flowerbed/nonstop 这类存量卡片的缺口词）。
+- --words / --list 显式指定词（如 flowerbed/nonstop 这类存量卡片的缺口词）；
+- 显式词不在表内时按「无级别兜底行」插入新行（word + 空级别 + 音标 + 空释义 + 0），
+  供词根页词族词等生僻词补音标；抓不到音标的空行会原样保存（word 仅 tab），
+  需在跑完后清理（连续失败会自动中止提示）。
 
 幂等：已有音标的词跳过；断点续跑（每 100 词落盘一次，原子替换）。
 freedict 不用：其 phonetics 多数只有音频 URL、无 IPA 文本。
@@ -11,6 +14,7 @@ freedict 不用：其 phonetics 多数只有音频 URL、无 IPA 文本。
 用法:
   python3 tools/fill_phonetics.py
   python3 tools/fill_phonetics.py --words flowerbed,nonstop
+  python3 tools/fill_phonetics.py --list /tmp/missing.txt
 """
 import argparse
 import re
@@ -103,6 +107,7 @@ def save(rows: dict[str, list[str]], order: list[str]) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--words", default="", help="额外指定词（逗号分隔）")
+    ap.add_argument("--list", default="", help="从文件读额外指定词（每行一个）")
     args = ap.parse_args()
 
     lines = TSV.read_text(encoding="utf-8").splitlines()
@@ -117,11 +122,19 @@ def main() -> None:
 
     # 目标：级别词缺任一音标 + 显式词
     target = [w for w in order if len(rows[w]) > 1 and rows[w][1] and (not rows[w][2] or not rows[w][3])]
-    extra = [w.strip().lower() for w in args.words.split(",") if w.strip()]
-    for w in extra:
-        if w in rows and w not in target and (not rows[w][2] or not rows[w][3]):
+    extra: list[str] = []
+    if args.words:
+        extra += [w.strip().lower() for w in args.words.split(",") if w.strip()]
+    if args.list:
+        extra += [w.strip().lower() for w in Path(args.list).read_text(encoding="utf-8").splitlines()
+                  if w.strip()]
+    for w in dict.fromkeys(extra):
+        if w not in rows:
+            rows[w] = [w, "", "", "", "", "0"]   # 表外词：插入无级别空行，抓取后回填音标
+            order.append(w)
+        if w not in target and (not rows[w][2] or not rows[w][3]):
             target.append(w)
-    print(f"目标词数: {len(target)}（级别词缺口 + 显式 {extra}）")
+    print(f"目标词数: {len(target)}（级别词缺口 + 显式 {len(extra)}）")
 
     filled_since_save = 0
     threads = [threading.Thread(target=worker, args=(target, rows, t, WORKERS), daemon=True)
