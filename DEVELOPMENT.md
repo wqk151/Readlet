@@ -49,9 +49,12 @@ Gradle: 使用 wrapper（8.9）
 ```
 app/src/main/
 ├── assets/
-│   ├── analyze_prompt.txt          # LLM 分析 prompt（用户底稿 + JSON 输出约束）
-│   └── word_levels.tsv             # 重点词级别表：word<TAB>级别<TAB>英标<TAB>美标<TAB>释义<TAB>四级标志
-│                                    # 级别: 六级/考研/雅思/专四/专八（缺省列留空）
+│   ├── analyze_prompt.txt          # LLM 句子/词分析 system prompt（字段约束 + 术语表注入位）
+│   ├── analyze_etymology.txt       # LLM 词源分析 system prompt（词族拆解/推导义，VERSION 控缓存）
+│   ├── word_levels.tsv             # 80k 词级表：word<TAB>级别<TAB>英标<TAB>美标<TAB>释义<TAB>四级标志
+│   │                                # （本地可信静态事实：音标/级别/释义）
+│   ├── wordroot.txt                # 词根词缀数据集（772 条 root/prefix/suffix + 例词：词源入口/词族/本地拆解）
+│   └── tts_mirror_manifest.json    # 本地发音引擎语音包下载清单（URL 前缀 + 文件相对路径/大小）
 ├── java/com/readlet/app/
 │   ├── ReadletApp.kt               # Application：DB/仓库/LLM/设置/词级表 单例装配
 │   ├── MainActivity.kt             # 分享接收(onNewIntent) + 导航状态 + 主题
@@ -77,6 +80,41 @@ app/src/main/
 └── res/  mipmap-anydpi-v26 自适应图标 / values 主题
 ```
 
+### 3.1 assets/ 资产清单与 LLM 搭配
+
+全部资源打包进 APK（`app/src/main/assets/`），运行时只读、可离线。五类资产分两类角色：**LLM prompt**（两个文本）与 **本地可信数据**（词表/词根数据集/语音包清单）。
+
+| 文件 | 体量 | 内容与来源 | 加载点 | 主要消费方 | 与 LLM 的关系 |
+|---|---|---|---|---|---|
+| `analyze_prompt.txt` | 10 KB | 句子/词分析 system prompt（用户底稿 + JSON 输出 schema 与字段约束）；人工维护 | `AnalyzePrompt.system()` | `CardRepository.analyzeCardInner` | 句子分析的 **prompt 本体**（请求时拼接术语表），LLM 按它产出结构化 JSON |
+| `analyze_etymology.txt` | 3 KB | 词源分析 system prompt（词根 → 词族每词 breakdown/推导义，JSON schema）；人工维护 | `EtymologyPrompt.system()` | `ensureEtymology`（词源库生成） | 词源分析的 **prompt 本体**；改动须 bump `EtymologyPrompt.VERSION` |
+| `word_levels.tsv` | 5.4 MB（APK 内 ~2.0） | 80,440 词：`word<TAB>级别<TAB>英标<TAB>美标<TAB>释义<TAB>四级标志`（柯林斯缓存 + 考研/雅思/六级/专四/专八表） | `WordLevels.load()`（启动一次，HashMap） | 分析落地（音标/级别兜底）、`KeywordFill` 补缺、`backfillWordGaps`、词根页词族音标、UI 元信息行 | **可信兜底**：LLM 字段落地前以词表优先（`phonetic/level` 用词表值覆盖 LLM 缺失项）；**不进 prompt** |
+| `wordroot.txt` | 325 KB（APK 内 ~75） | 词根词缀数据集 772 条（class=root 503/prefix 117/suffix 152），每条 meaning/class/root/origin/example[]（ECDICT MIT + 蒋争《英语词汇的奥秘》扩充，见 ADR 0003） | `Roots.load()`（启动一次，三索引） | 词源入口判定、词根页词族、本地拆解/回退、`lexicon` 词根归属 | **LLM 词源生成的闸门与输入**（见下）；**不进 prompt** |
+| `tts_mirror_manifest.json` | 18 KB | 本地发音引擎语音包下载清单（`{path,size}` + hf-mirror URL 前缀） | `TtsManager`/`VoiceCatalog` | 本地 TTS（sherpa-onnx 引擎包按需下载，不预装 APK） | **无关**：纯本地发音链路，见 ADR 0002 |
+
+**两个 prompt 资产与 LLM 的分工**
+
+- `analyze_prompt.txt` 是句子分析唯一 prompt：system = 资产全文 + 术语表（设置 `glossary`）注入；LLM 输出由 `AnalysisParser` 校验解析为 `AnalyzeResult`。改 schema/字段约束时**必须同步** `AnalysisParser`/`AnalyzeResult` 及其单测（`AnalysisParserTest`）。
+- `analyze_etymology.txt` 是词源生成唯一 prompt：给定词根 + 构词义 + 词族（来自 wordroot），LLM 逐词给 breakdown/推导义，`EtymologyParser` 解析后落地 `root_etymology`（带 `promptVersion`）。**prompt 改动必须 bump `EtymologyPrompt.VERSION`**——旧缓存（`promptVersion < VERSION`）在读取时自动判失效、重新生成。
+
+**静态数据与 LLM 的源可信分层**（ADR 0003：本地可信数据优先，LLM 只兜底、不确定→null 禁编造）
+
+- **词表（word_levels）**管"静态事实"：音标（英/美）、级别、原型、词典释义。分析落库时逐字段 `词表值 ?: LLM 值`（如 `phonetic = wordLevels.phoneticOf(part) ?: k.phoneticUk`）；词表查缺补漏只加**有级别**词（`KeywordFill`，上限 5）；启动 `backfillWordGaps` 幂等回填历史缺口。词表同时给词根页词族词提供音标与词典义兜底。
+- **词根数据集（wordroot）**管"词根锚点 + 词族"，与 LLM 词源生成三处配合：
+  1. **触发闸门**：每次分析后 `triggerEtymologyFor` 只对 `wordToRoot` 命中的词触发 LLM 词源生成（按词根去重、幂等、异步不阻塞）——词根由本地数据集认定，LLM 不参与"某个词属于哪个词根"的判定，杜绝漂移/臆造；
+  2. **生成输入**：发给 LLM 的词族 = 该词根的 example[]，LLM 只在给定词族内逐词拆解，不自由枚举；
+  3. **离线/失败回退**：词源库未生成或 LLM 失败时，词根页回退本地 `breakdownOf`（前缀+词根+后缀交叉推导，不虚构）+ 词族行 + 词表词典义。重点词构词字段同理：`affix = roots.breakdownOf ?: LLM affix`。
+- **数据扩充自动生效**：wordroot/词表是纯数据，扩充（如 2026-09 +80 词根）只替换资产即可，新词根的词源入口/词族/拆解由索引自动覆盖，无需改代码与 Room。
+
+**变更须知（改资产时逐条核对）**
+
+- `analyze_prompt.txt`：schema 改动 → 同步 `AnalysisParser`/`AnalyzeResult`/`AnalysisParserTest`；句子分析 prompt 无版本字段（不落库），改完重分析即有。
+- `analyze_etymology.txt`：→ 同步 `EtymologyParser` + bump `EtymologyPrompt.VERSION`（触发旧缓存重生成，见 CardRepository.loadEtymologyItems）。
+- `word_levels.tsv`：重新生成链路见 4.3（kd_data.db + `tools/fill_phonetics.py`）；收词须过 8 万词表校验的纪律见 ADR 0003；词表升级后 `backfillWordGaps` 会在下次启动自动补齐旧数据。
+- `wordroot.txt`：替换/扩充须保持 772 条 JSON 结构与 class 口径；并入新词根/例词时遵循 ADR 0003 质量规则（词表校验、防 word→root 碰撞、数字消歧条目不并入）。
+- `tts_mirror_manifest.json`：内容须与远端镜像实际文件（`size` 逐文件一致，下载校验）同步；引擎升级时 URL 前缀与 manifest 一起换。
+- **缺省行为**：prompt 资产缺失 → 代码内置一句话兜底（不应发生）；数据资产缺失 → 加载为空表、相关功能静默失效（`WordLevels`/`Roots` 均如此），**禁止删除**。
+
 ## 4. 关键实现要点
 
 ### 4.1 分享接收
@@ -101,11 +139,11 @@ insertCard(text, source) → status=ANALYZING
 - prompt 约束（assets/analyze_prompt.txt）：keywords 每条必须含 phonetic（英式 IPA）、pos（标准缩写，动词变形标「v. (过去式/现在分词/第三人称单数)」，短语标「n. phrase / phr. v.」）、meaning_in_context（纯中文，不得以词性缩写开头）——保证卡片内字段位置统一。
 
 ### 4.3 重点词级别（todo #4）
-- 资产 `assets/word_levels.tsv`（80,440 词，约 4.7MB，APK 压缩后约 1.6MB）：
+- 资产 `assets/word_levels.tsv`（82,064 行，原始约 5.5MB，APK 压缩后约 2.1MB）：
   - 级别词 16,241：六级 2535 + 考研 2572 + 雅思 2807 + 专四 2592 + 专八 5735
-  - **无级别兜底词 64,199**（柯林斯缓存 `~/.cache/kdcache/kd_data.db` 全量单 token 词，仅提供音标/释义兜底，不参与补缺、不显示角标）
+  - **无级别兜底词 65,823**（柯林斯缓存 `~/.cache/kdcache/kd_data.db` 全量单 token 词 + 词根词族生僻词补行，仅提供音标/释义兜底，不参与补缺、不显示角标）
 - 数据源：本地柯林斯词典缓存（`kd_data.db`：音标/释义，84k 词）+ 开源词表（考研/雅思/六级/专四/专八级别标签）。TSV 生成时用 kd_data 回填了级别词的音标缺口（9,571 缺音标中 5,312 个已回填，如 loom → [luːm]）。
-- 音标缺口维护：`tools/fill_phonetics.py`（有道词典页面抓取英/美音标，幂等、断点续跑）——kd_data 无数据的词用 `python3 tools/fill_phonetics.py` 批量补。
+- 音标缺口维护：`tools/fill_phonetics.py`（有道词典页面抓取英/美音标，幂等、断点续跑；支持 `--list` 文件批量与表外新词插行）——kd_data 无数据的词用 `python3 tools/fill_phonetics.py` 批量补；词表与有道都缺的生僻词可由《英语词汇的奥秘(音标精排版)》PDF 兜底（`tools/extract_jz_pdf_phonetics.py`，仅词族词、仅填英标缺口，书音标为老式转写）。
 - 优先级（一词多表取高）：专八 > 雅思 > 考研 > 六级 > 专四。
 - 运行时：`WordLevels` 启动时加载为 `HashMap<word, Entry>`；查词走**变形还原**（原形 → ing/ed/ies/es/s 后缀剥离回退），O(1) 每词，零 LLM 成本。
 - 分析时对已分析句子做补充：句中每个 token 查表，命中且未被 LLM 关键词覆盖（含词组包含）则加为 CardWord（仅限**有级别**的词，上限 5 个）；LLM 关键词本身命中级别也补角标，未命中词表则用兜底词的音标/释义。

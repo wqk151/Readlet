@@ -43,6 +43,14 @@ accepted
 - **保留**：①词源触发仍以本地 `word→root` 判定（只在"新词根首次出现"时生成，不是每词都调 LLM）；②诚实 prompt（"不确定→缺省，禁止编造"）；③词源库幂等（已缓存复用）、异步挂载分析不阻塞；④本地拆解/同根作回退。
 - 因此"词根锚点只信本地数据集 / 词根页全部取 wordroot 原文不掺 LLM"两条被**修订**：词根页主视图取 LLM 词源库，本地数据作回退。
 
+## Update (v0.9.0)
+
+本地数据集在 v0.9.0 **扩充**：并入蒋争《英语词汇的奥秘》（**自购正版、仅个人设备使用**）词根/词缀章节的**事实字段**（词根拼写、构词义、例词清单），不复制书中逐词拆解文本与长释义。
+- **范围**：252 词根节 + 前缀 ~124 形式 + 后缀 ~143 形式，全部与现有 ECDICT 条目对齐后并入：新增 root 80（audi/circ/cruc/flu/habit/migr/milit/oper/ori/pet/pict/punct/tail/tect/cert/cult/norm/tour/ut/us 等此前缺失的常见词根）、前缀 7、后缀 ~74；既有 500+ 条目追加例词。
+- **质量校验（自动化）**：①例词必须命中 `word_levels.tsv`（80k 柯林斯+考纲词，滤 OCR 噪音/生僻词）；②跳过已在数据集任何条目归属的例词（保持 word→root 反向映射确定性）；③同段同根词去重；④语义分家的数字消歧条目（`-er1/-er2`、`in-1/in-2`、`-ism1/-ism2` 等）**不并入**（书按义项大组编排，无法安全拆分，避免归属漂移）。
+- **已知瑕疵**：EPUB 由 doc 扫描转换，少量条目名/词形经 OCR 纠错（momin→nomin、paht→path、voo,vok→voc,vok、hector→hecto 类）；`缺一页`（词根 #115 urb）由上下文重建；个别词族含释义注解单词（pen-/quasi- 组已整组剔除）。部分新增根只有中文构词义（书未给英文 gloss），与既有英文 meaning 并存。
+- **效果**：数据集 611→772 条；词源入口覆盖词 4,501→5,647（+1,146），petition/orient/cultivate/military/certify/fluid/detail 等此前无入口的常见词获得入口；词源触发以 word→root 判定，旧 `root_etymology` 缓存不受影响（新增词根首见才生成）。
+
 ## Consequences
 
 - APK 增重 = wordroot.txt 裁剪体积(数百 KB 级),离线可用。
