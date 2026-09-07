@@ -79,6 +79,21 @@ object Keywords {
         return LEVEL_LABELS[l] ?: l
     }
 
+    /** 词根来源显示映射：Latin → 「Latin（拉丁语）」；未收录语种原样兜底（词根页/词根库共用）。 */
+    private val ORIGIN_LABELS = mapOf(
+        "Latin" to "Latin（拉丁语）",
+        "Greek" to "Greek（希腊语）",
+        "Latin and Greek" to "Latin and Greek（拉丁语和希腊语）",
+        "Old English" to "Old English（古英语）",
+        "Middle English" to "Middle English（中古英语）",
+    )
+
+    /** 词根来源展示串；来源为空返回 null 表示不显示。 */
+    fun originLabel(origin: String?): String? {
+        val o = origin?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return ORIGIN_LABELS[o] ?: o
+    }
+
     /**
      * 词表释义词性前缀拆分：「n. 峡谷」→ (n., 峡谷)；「vt., vi. = brutalize」→ (vt., vi., = brutalize)。
      * 词表（柯林斯缓存）释义自带词性前缀，补缺词没有独立 pos 字段，直接展示会让「n.」出现在翻译前。

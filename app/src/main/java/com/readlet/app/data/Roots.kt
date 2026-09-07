@@ -7,7 +7,10 @@ import java.io.IOException
 /**
  * 词根词源数据（词根页/词根库/词源入口）。
  * 数据来自 `assets/wordroot.txt`（ECDICT `wordroot.txt`，MIT）：预先整理的英文词根/前后缀，
- * ~611 条（class=root 423、prefix 110、各种 *-forming suffix 78）。每条含 meaning/class/root/origin/example[]。
+ * 772 条（class=root 503、prefix 117、各种 *-forming suffix 152）。每条含 meaning/meaningZh/class/root/origin/example[]。
+ * 2026-09 起以蒋争《英语词汇的奥秘》（自购正版，个人使用）词根/词缀章节补充新词根与词族例词、
+ * 以及 213 条词根的中文构词义（meaningZh，展示优先于英文）
+ * （仅事实字段：词根拼写/构词义/例词；例词经 `word_levels.tsv` 收词校验、跳过既有归属词）。
  *
  * 启动时构建三层索引：
  * - [Roots.roots]：root → [RootEntry]（root/meaning/origin/family=example[]），供词根页与词根库；
@@ -22,10 +25,11 @@ class Roots internal constructor(
     private val wordToRoot: Map<String, String>,
     private val breakdown: Map<String, List<AffixPart>>,
 ) {
-    /** 词根条目：root=词根名，meaning=构词含义，origin=来源（拉丁/希腊/古英），family=同根词族。 */
+    /** 词根条目：root=词根名，meaning=构词含义，meaningZh=中文构词义（蒋争数据源收录时才有，展示优先于英文），origin=来源（拉丁/希腊/古英），family=同根词族。 */
     data class RootEntry(
         val root: String,
         val meaning: String,
+        val meaningZh: String? = null,
         val origin: String?,
         val family: List<String>,
     )
@@ -83,6 +87,7 @@ class Roots internal constructor(
                         roots[canonical] = RootEntry(
                             root = canonical,
                             meaning = o.optString("meaning"),
+                            meaningZh = o.optString("meaningZh").takeIf { it.isNotBlank() },
                             origin = o.optString("origin").takeIf { it.isNotBlank() },
                             family = family,
                         )

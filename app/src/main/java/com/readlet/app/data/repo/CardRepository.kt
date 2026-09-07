@@ -645,6 +645,12 @@ class CardRepository(
     fun dictionaryMeaning(word: String): String? =
         wordLevels.lookup(word)?.meaning?.takeIf { it.isNotBlank() }
 
+    /** 词在本地词表的英式音标（变形原形回退同 [lemmaOf]）；未收录返回 null。 */
+    fun phoneticOf(word: String): String? = wordLevels.phoneticOf(word)
+
+    /** 词在本地词表的美式音标（规则同 [phoneticOf]）；未收录返回 null。 */
+    fun phoneticUsOf(word: String): String? = wordLevels.phoneticUsOf(word)
+
     // ---------- 词源/词库 ----------
 
     /** 词/词组知识库条目：从 CardWord 派生（词根由本地词根数据集判定）。 */

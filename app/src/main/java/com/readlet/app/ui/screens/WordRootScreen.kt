@@ -35,14 +35,19 @@ import androidx.compose.ui.unit.sp
 import com.readlet.app.data.Roots
 import com.readlet.app.llm.EtymologyItem
 import com.readlet.app.ui.AppViewModel
+import com.readlet.app.ui.KeywordMetaLine
+import com.readlet.app.ui.Keywords
 import com.readlet.app.ui.theme.Amber
 import com.readlet.app.ui.theme.Green
 import com.readlet.app.ui.theme.Ink
 import com.readlet.app.ui.theme.Muted
 
 /** 词根页（自主设计，参考 Etyma 词根页风格）：
- * header=`port ＝ carry` + 来源 + 词族规模；词族行=词（绿）+ 拆解（前缀/后缀琥珀、词根绿，各附简要义）居左，
- * 释义/推导义居右；紧凑、细分割线。优先读词源库（LLM 生成的中文短义 + 推导义），缺则回退本地拆解+同根。 */
+ * header=词根名（大字）+ 来源右上（Latin→Latin（拉丁语）），构词义另起一行（中文义优先，缺则英文）；
+ * 词族行=词（绿）+ 音标（英/美，本地词表查得才显）+ 拆解
+ * （前缀/后缀琥珀、词根绿，各附简要义）居左，释义/推导义居右；紧凑、细分割线。
+ * 优先读词源库（LLM 生成的中文短义 + 推导义）；LLM 漏掉的词族词以本地行补齐（词族不缩水），
+ * 词源库整条缺失/失败才整体回退本地拆解+同根。 */
 @Composable
 fun WordRootScreen(vm: AppViewModel, rootName: String) {
     val entry = remember(rootName) { vm.roots.byRoot(rootName) }
@@ -77,22 +82,30 @@ fun WordRootScreen(vm: AppViewModel, rootName: String) {
             return@Column
         }
 
-        // header：`port ＝ carry`（词根＝构词义），来源在右上，词族规模在下一行。
+        // header：词根名一行（来源右上），构词义另起一行——中文义优先（蒋争数据），缺则英文原文。
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(entry.root, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Green)
-            Text(" ＝ ${entry.meaning}", fontSize = 19.sp, fontWeight = FontWeight.Medium, color = Ink)
             Spacer(Modifier.weight(1f))
-            entry.origin?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 12.sp, color = Muted) }
+            Keywords.originLabel(entry.origin)?.let { Text(it, fontSize = 12.sp, color = Muted) }
         }
         Text(
-            "词族 ${etItems?.size ?: entry.family.size} 词",
+            "＝ ${entry.meaningZh?.takeIf { it.isNotBlank() } ?: entry.meaning}",
+            fontSize = 19.sp, fontWeight = FontWeight.Medium, color = Ink,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        // 词族规模：本地词族 ∪ LLM 词源条目（LLM 漏词由本地行补足，计数按并集；LLM 越界词计为新增）。
+        val shown = etItems
+        val familyLower = remember(entry) { entry.family.mapTo(HashSet()) { it.lowercase() } }
+        val familyCount = entry.family.size +
+            (shown?.count { it.word.lowercase() !in familyLower } ?: 0)
+        Text(
+            "词族 $familyCount 词",
             fontSize = 12.sp, color = Muted, modifier = Modifier.padding(top = 2.dp),
         )
         Spacer(Modifier.height(6.dp))
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
-        // 词源库条目（LLM：中文短义 + 推导义），否则回退本地拆解/同根。
-        val shown = etItems
+        // 词源库条目（LLM：中文短义 + 推导义），否则整体回退本地拆解/同根。
         if (shown == null) {
             entry.family.forEach { w ->
                 val seen = seenCounts[w.lowercase()] ?: 0
@@ -101,30 +114,56 @@ fun WordRootScreen(vm: AppViewModel, rootName: String) {
                     breakdown = vm.roots.breakdownOf(w),
                     gloss = vm.dictionaryGloss(w),
                     rootMeaning = entry.meaning,
+                    phonetic = vm.phoneticOf(w),
+                    phoneticUs = vm.phoneticUsOf(w),
                     seen = seen,
                     onClick = if (seen > 0) { { vm.openWord(w) } } else null,
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }
         } else {
+            val covered = HashSet<String>()
             shown.forEach { item ->
+                covered.add(item.word.lowercase())
                 val seen = seenCounts[item.word.lowercase()] ?: 0
                 EtymFamilyRow(
                     item = item,
+                    phonetic = vm.phoneticOf(item.word),
+                    phoneticUs = vm.phoneticUsOf(item.word),
                     seen = seen,
                     onClick = if (seen > 0) { { vm.openWord(item.word) } } else null,
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            // LLM 词源宁缺毋滥、可能漏词族词：漏掉的词按本地词族顺序补本地行（含拆解/词典义/音标），
+            // 词根页词族不随 LLM 返回的多寡缩水。
+            entry.family.forEach { w ->
+                if (!covered.contains(w.lowercase())) {
+                    val seen = seenCounts[w.lowercase()] ?: 0
+                    LocalFamilyRow(
+                        word = w,
+                        breakdown = vm.roots.breakdownOf(w),
+                        gloss = vm.dictionaryGloss(w),
+                        rootMeaning = entry.meaning,
+                        phonetic = vm.phoneticOf(w),
+                        phoneticUs = vm.phoneticUsOf(w),
+                        seen = seen,
+                        onClick = if (seen > 0) { { vm.openWord(w) } } else null,
+                    )
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                }
             }
         }
         Spacer(Modifier.height(24.dp))
     }
 }
 
-/** 词族行：内部三行——①单词本身 ②拆分（按类型着色+中文义）③记忆翻译（推导义/中文释义）；命中词库可点。 */
+/** 词族行：内部四行——①单词本身 ②音标（英/美）③拆分（按类型着色+中文义）④记忆翻译（推导义/中文释义）；命中词库可点。 */
 @Composable
 private fun FamilyRow(
     word: String,
+    phonetic: String?,
+    phoneticUs: String?,
     breakdown: List<Triple<String, String, String>>?,
     meaning: String?,
     seen: Int,
@@ -140,7 +179,9 @@ private fun FamilyRow(
                 Text("你见过 ${seen} 次", fontSize = 11.sp, color = Amber)
             }
         }
-        // ② 拆分
+        // ② 音标（英/美，词表未收录则不显示；与详情/复习页同款「英 x · 美 y」格式）
+        KeywordMetaLine(word = word, phonetic = phonetic, phoneticUs = phoneticUs, level = null, lemma = null)
+        // ③ 拆分
         breakdown?.let { b ->
             Text(
                 breakdownAnnotated(b),
@@ -148,7 +189,7 @@ private fun FamilyRow(
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }
-        // ③ 记忆翻译
+        // ④ 记忆翻译
         meaning?.takeIf { it.isNotBlank() }?.let {
             Text(
                 it,
@@ -163,9 +204,17 @@ private fun FamilyRow(
 
 /** LLM 词源条目行：bsk=前缀/词根/后缀 + 中文短义；meaning=推导义（`搬出去 → 出口`）。 */
 @Composable
-private fun EtymFamilyRow(item: EtymologyItem, seen: Int, onClick: (() -> Unit)?) {
+private fun EtymFamilyRow(
+    item: EtymologyItem,
+    phonetic: String?,
+    phoneticUs: String?,
+    seen: Int,
+    onClick: (() -> Unit)?,
+) {
     FamilyRow(
         word = item.word,
+        phonetic = phonetic,
+        phoneticUs = phoneticUs,
         breakdown = item.breakdown?.map { Triple(it.part, it.type, it.meaning) },
         meaning = item.meaning,
         seen = seen,
@@ -180,11 +229,15 @@ private fun LocalFamilyRow(
     breakdown: List<Roots.AffixPart>?,
     gloss: String?,
     rootMeaning: String,
+    phonetic: String?,
+    phoneticUs: String?,
     seen: Int,
     onClick: (() -> Unit)?,
 ) {
     FamilyRow(
         word = word,
+        phonetic = phonetic,
+        phoneticUs = phoneticUs,
         breakdown = breakdown?.map { Triple(it.part, it.type, shortMeaning(it.meaning)) },
         meaning = gloss ?: rootMeaning.takeIf { it.isNotBlank() }?.let { "同根 $it" },
         seen = seen,

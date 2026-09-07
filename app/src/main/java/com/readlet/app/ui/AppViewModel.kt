@@ -571,6 +571,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 词的原形（词表变形还原，内存查表）；原形/未命中返回 null。详情页/复习页音标行展示。 */
     fun lemmaOf(word: String): String? = repo.lemmaOf(word)
 
+    /** 词在本地词表的英式音标（词根页词族词展示；变形还原回退同 [lemmaOf]）；未收录返回 null。 */
+    fun phoneticOf(word: String): String? = repo.phoneticOf(word)
+
+    /** 词在本地词表的美式音标（规则同 [phoneticOf]）；未收录返回 null。 */
+    fun phoneticUsOf(word: String): String? = repo.phoneticUsOf(word)
+
     suspend fun loadCard(cardId: Long): Card? = repo.cardById(cardId)
     suspend fun loadWords(cardId: Long): List<CardWord> = repo.wordsOfCard(cardId)
     suspend fun loadCardsByWord(word: String): List<Card> = repo.cardsByWord(word)

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.readlet.app.data.Roots
 import com.readlet.app.ui.AppViewModel
+import com.readlet.app.ui.Keywords
 import com.readlet.app.ui.theme.Green
 import com.readlet.app.ui.theme.Muted
 
@@ -118,8 +119,8 @@ private fun RootRow(e: Roots.RootEntry, onClick: () -> Unit) {
                 Text(" · ${e.family.size} 词", fontSize = 12.sp, color = Muted, modifier = Modifier.padding(start = 6.dp))
             }
             val meta = listOfNotNull(
-                e.meaning.takeIf { it.isNotBlank() },
-                e.origin?.takeIf { it.isNotBlank() }?.let { "来源 $it" },
+                (e.meaningZh?.takeIf { it.isNotBlank() } ?: e.meaning).takeIf { it.isNotBlank() },
+                Keywords.originLabel(e.origin)?.let { "来源 $it" },
             ).joinToString(" · ")
             if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
